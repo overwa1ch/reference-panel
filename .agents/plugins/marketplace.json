@@ -1,0 +1,12 @@
+{
+  "name": "reference-panel",
+  "interface": {"displayName": "Reference Panel"},
+  "plugins": [
+    {
+      "name": "reference-panel",
+      "source": {"source": "local", "path": "./plugins/reference-native-test"},
+      "policy": {"installation": "AVAILABLE", "authentication": "ON_INSTALL"},
+      "category": "Productivity"
+    }
+  ]
+}

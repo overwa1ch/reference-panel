@@ -1,0 +1,1310 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>参考</title>
+<style>
+  /* Local tokens map onto the host's theme variables (hostContext.styles),
+     with fallbacks for the standalone source preview. */
+  :root {
+    color-scheme: light dark;
+    --surface: var(--color-background-primary, light-dark(#fbfaf7, #1d1e1b));
+    --raised: var(--color-background-secondary, light-dark(#ffffff, #262724));
+    --text: var(--color-text-primary, light-dark(#2b2d29, #e8e8e3));
+    --subtle: var(--color-text-secondary, light-dark(#7a7c75, #9a9c93));
+    --muted: color-mix(in srgb, var(--text) 78%, var(--surface));
+    --line: var(--color-border-primary, light-dark(#e3e2db, #393b35));
+    --line-soft: var(--color-border-secondary, light-dark(#ecebe5, #2d2f2a));
+    --ring: var(--color-ring-primary, light-dark(#5f7a52, #a2b397));
+    --danger: var(--color-text-danger, light-dark(#b3412f, #e59a87));
+    --danger-bg: var(--color-background-danger, light-dark(#fbeeea, #3a2622));
+    --info: var(--color-text-info, light-dark(#4d6da6, #8fb0e8));
+    --success: var(--color-text-success, light-dark(#4f7a3a, #9cc28a));
+    --warning: var(--color-text-warning, light-dark(#a8661c, #e3ae6b));
+    --inverse-bg: var(--color-background-inverse, light-dark(#2f322b, #e7e8de));
+    --inverse-text: var(--color-text-inverse, light-dark(#fafbf7, #272a22));
+    --wash: color-mix(in srgb, var(--text) 4%, var(--surface));
+    --well: color-mix(in srgb, var(--text) 7%, var(--surface));
+    --hover: color-mix(in srgb, var(--text) 6%, transparent);
+    --pressed: color-mix(in srgb, var(--text) 10%, transparent);
+    --selected: color-mix(in srgb, var(--ring) 16%, transparent);
+    --font: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+    --mono: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    --fs-xs: var(--font-text-xs-size, 12px);
+    --fs-sm: var(--font-text-sm-size, 13px);
+    --fs-md: var(--font-text-md-size, 14px);
+    --fw-medium: var(--font-weight-medium, 500);
+    --fw-semibold: var(--font-weight-semibold, 600);
+    --r-xs: var(--border-radius-xs, 5px);
+    --r-sm: var(--border-radius-sm, 7px);
+    --r-md: var(--border-radius-md, 10px);
+    --r-lg: var(--border-radius-lg, 12px);
+    --shadow-sm: var(--shadow-sm, 0 1px 2px -1px rgb(0 0 0 / .08));
+    --shadow-md: var(--shadow-md, 0 2px 4px -1px rgb(0 0 0 / .08));
+    --shadow-menu: var(--shadow-lg, 0 4px 8px -2px rgb(0 0 0 / .1)), var(--shadow-hairline, 0 0 0 .5px rgb(0 0 0 / .1));
+    --ease: cubic-bezier(.2, .7, .2, 1);
+    --gutter: 16px;
+    --header: 52px;
+    color: var(--text); background: var(--surface);
+    font: var(--fs-sm)/1.5 var(--font);
+    -webkit-font-smoothing: antialiased;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { background: var(--surface); }
+  body { margin: 0; min-height: 100vh; display: flex; flex-direction: column; }
+  button, input { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  button:disabled { opacity: .45; cursor: default; }
+  :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+  svg { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  .symbols { position: absolute; width: 0; height: 0; overflow: hidden; }
+  .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+  /* Header */
+  .toolbar { position: sticky; top: 0; z-index: 6; min-height: var(--header); display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 var(--gutter);
+    background: color-mix(in srgb, var(--surface) 92%, transparent); backdrop-filter: saturate(1.4) blur(10px); border-bottom: 1px solid var(--line-soft); }
+  .heading { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  h1 { margin: 0; font-size: var(--fs-md); font-weight: var(--fw-semibold); letter-spacing: .01em; }
+  .count { min-width: 20px; padding: 0 6px; border-radius: 999px; background: var(--well); color: var(--muted); font-size: 11px; font-weight: var(--fw-medium); line-height: 19px; text-align: center; font-variant-numeric: tabular-nums; }
+  .count:empty { display: none; }
+  .toolbar-actions { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .add-button { display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 11px 0 9px; border: 0; border-radius: var(--r-sm); background: var(--inverse-bg); color: var(--inverse-text);
+    font-size: var(--fs-xs); font-weight: var(--fw-medium); white-space: nowrap; box-shadow: var(--shadow-sm); transition: transform .12s var(--ease), opacity .12s; }
+  .add-button svg { width: 13px; height: 13px; stroke-width: 2; }
+  .add-button:not(:disabled):hover { opacity: .9; }
+  .add-button:not(:disabled):active { transform: scale(.97); }
+  .segmented { display: flex; padding: 2px; border-radius: var(--r-sm); background: var(--well); }
+  .segmented button { width: 26px; height: 24px; display: grid; place-items: center; padding: 0; border: 0; border-radius: calc(var(--r-sm) - 2px); background: transparent; color: var(--subtle); transition: background .15s, color .15s; }
+  .segmented button svg { width: 14px; height: 14px; }
+  .segmented button[aria-pressed="true"] { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm), 0 0 0 .5px var(--line); }
+  .segmented button:not([aria-pressed="true"]):hover { color: var(--text); }
+  .ghost { height: 28px; padding: 0 8px; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--muted); font-size: var(--fs-xs); white-space: nowrap; }
+  .ghost:not(:disabled):hover { background: var(--hover); color: var(--text); }
+  .ghost.danger { color: var(--danger); }
+  .ghost.danger:not(:disabled):hover { background: var(--danger-bg); color: var(--danger); }
+  .bulk-bar { display: flex; align-items: center; gap: 2px; }
+  .bulk-bar > span { margin-right: 4px; color: var(--muted); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  /* Status line */
+  .status-line { display: flex; align-items: center; gap: 8px; margin: 10px var(--gutter) 0; padding: 7px 10px 7px 12px; border-radius: var(--r-md); background: var(--wash); box-shadow: inset 0 0 0 1px var(--line-soft); color: var(--muted); font-size: var(--fs-xs); line-height: 1.5; animation: rise .2s var(--ease); }
+  .status-line.error { background: var(--danger-bg); box-shadow: none; color: var(--danger); }
+  #picker-status { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .link-button { flex: none; border: 0; padding: 0; background: transparent; color: var(--text); font-size: var(--fs-xs); font-weight: var(--fw-medium); text-decoration: underline; text-decoration-color: color-mix(in srgb, currentColor 40%, transparent); text-underline-offset: 3px; }
+  .standalone-note { margin: 12px var(--gutter) 0; color: var(--muted); font-size: var(--fs-xs); line-height: 1.7; }
+
+  main { position: relative; flex: 1; padding: 0 var(--gutter) 16px; }
+
+  /* Preview board */
+  .preview-board { scroll-margin-top: calc(var(--header) + 8px); margin: 14px 0 6px; border-radius: var(--r-lg); overflow: hidden; background: var(--surface); box-shadow: 0 0 0 1px var(--line), var(--shadow-md); animation: rise .22s var(--ease); }
+  .preview-heading { display: flex; align-items: center; gap: 9px; min-height: 42px; padding: 5px 6px 5px 10px; border-bottom: 1px solid var(--line-soft); }
+  .preview-heading strong { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--fs-xs); font-weight: var(--fw-semibold); }
+  .preview-actions { display: flex; align-items: center; gap: 1px; }
+  .icon-button { width: 28px; height: 28px; display: grid; place-items: center; flex: none; padding: 0; border: 0; border-radius: var(--r-xs); background: transparent; color: var(--subtle); transition: background .12s, color .12s; }
+  .icon-button:not(:disabled):hover { background: var(--hover); color: var(--text); }
+  .icon-button[aria-pressed="true"] { background: var(--pressed); color: var(--text); }
+  .icon-button svg { width: 15px; height: 15px; }
+  .preview-stage { position: relative; height: clamp(180px, 42vh, 480px); display: grid; place-items: center; overflow: auto; background: var(--wash); }
+  .preview-stage[data-kind="video"] { height: auto; aspect-ratio: var(--ratio, 16 / 9); max-height: min(60vh, 520px); background: #0e0f0d; overflow: hidden; }
+  .preview-stage[data-kind="audio"] { height: auto; min-height: 96px; padding: 24px 16px; }
+  .preview-stage[data-kind="image"] { height: auto; min-height: 160px; max-height: min(60vh, 560px);
+    background: repeating-conic-gradient(color-mix(in srgb, var(--text) 6%, var(--wash)) 0 25%, var(--wash) 0 50%) 0 0 / 16px 16px; }
+  .preview-stage[data-kind="pdf"] { height: auto; min-height: 200px; max-height: min(70vh, 640px); place-items: start center; padding: 14px; }
+  .preview-stage[data-kind="message"] { height: 200px; }
+  .preview-stage[data-kind="text"] { height: auto; min-height: 120px; max-height: min(60vh, 520px); place-items: stretch; background: var(--surface); }
+  #preview-content { width: 100%; height: 100%; min-height: 0; display: grid; place-items: center; transition: opacity .15s; }
+  #preview-content:empty { display: none; }
+  #preview-content video { display: block; width: 100%; height: 100%; object-fit: contain; }
+  #preview-content audio { width: 100%; }
+  #preview-content img { display: block; max-width: 100%; max-height: min(60vh, 560px); object-fit: contain; }
+  .preview-stage[data-kind="pdf"] #preview-content img { width: 100%; max-height: none; height: auto; background: #fff; border-radius: 3px; box-shadow: 0 0 0 1px rgb(0 0 0 / .06), 0 2px 8px -2px rgb(0 0 0 / .18); }
+  #preview-content pre { align-self: stretch; justify-self: stretch; width: 100%; margin: 0; padding: 14px 16px; white-space: pre-wrap; overflow-wrap: anywhere; font: var(--fs-xs)/1.7 var(--mono); color: var(--text); }
+  .preview-message { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 20px; text-align: center; color: var(--muted); font-size: var(--fs-xs); line-height: 1.7; background: var(--wash); }
+  .preview-message > svg { width: 28px; height: 28px; stroke-width: 1.3; color: var(--subtle); }
+  .preview-message.error > svg, .preview-message.error #preview-message-text { color: var(--danger); }
+  .message-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-top: 2px; }
+  .message-actions:empty { display: none; }
+  .pill { height: 28px; padding: 0 11px; border: 0; border-radius: var(--r-sm); background: var(--surface); box-shadow: 0 0 0 1px var(--line), var(--shadow-sm); color: var(--text); font-size: var(--fs-xs); }
+  .pill:not(:disabled):hover { background: var(--wash); }
+  .pill.danger { color: var(--danger); }
+  .preview-progress { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; background: var(--wash); color: var(--muted); font-size: var(--fs-xs); }
+  .preview-stage[data-kind="video"] .preview-progress, .preview-stage[data-kind="video"] .preview-message { background: #0e0f0d; color: #c9cbc4; }
+  .progress-track { width: min(180px, 60%); height: 3px; border-radius: 2px; background: color-mix(in srgb, currentColor 20%, transparent); overflow: hidden; }
+  .progress-bar { width: 0; height: 100%; border-radius: inherit; background: currentColor; transition: width .2s ease; }
+  .preview-bottom { min-height: 34px; padding: 5px 8px 5px 12px; display: flex; align-items: center; gap: 8px; border-top: 1px solid var(--line-soft); color: var(--muted); font-size: var(--fs-xs); }
+  #preview-status { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .page-controls { display: flex; align-items: center; gap: 2px; font-variant-numeric: tabular-nums; }
+  .page-controls .icon-button { width: 24px; height: 24px; }
+
+  /* Thumbnails (cards, rows, preview header) */
+  .thumb { --kind: var(--subtle); position: relative; display: grid; place-items: center; flex: none; overflow: hidden; color: var(--kind); background: color-mix(in srgb, var(--kind) 11%, var(--wash)); }
+  .thumb[data-kind="video"] { --kind: var(--info); }
+  .thumb[data-kind="image"] { --kind: var(--success); }
+  .thumb[data-kind="pdf"] { --kind: var(--danger); }
+  .thumb[data-kind="audio"] { --kind: var(--warning); }
+  .thumb[data-kind="document"] { --kind: var(--info); }
+  .thumb > svg { width: 16px; height: 16px; }
+  .thumb > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; animation: fade .25s ease-out; }
+  .thumb.page { background: var(--well); }
+  /* Pages keep their own shape, like a sheet lying on the card. */
+  .thumb.page > img { position: relative; inset: auto; width: auto; height: auto; max-width: 78%; max-height: 80%; object-fit: contain; border-radius: 2px;
+    box-shadow: 0 0 0 1px rgb(0 0 0 / .05), 0 2px 8px -2px rgb(0 0 0 / .22); }
+  .thumb[data-state="pending"]::after { content: ""; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 30%, color-mix(in srgb, var(--surface) 55%, transparent) 50%, transparent 70%) 0 0 / 200% 100%; animation: shimmer 1.2s linear infinite; }
+  .duration { position: absolute; right: 5px; bottom: 5px; padding: 0 5px; border-radius: 4px; background: rgb(0 0 0 / .62); color: #fff; font-size: 10.5px; font-weight: var(--fw-medium); line-height: 17px; font-variant-numeric: tabular-nums; backdrop-filter: blur(4px); }
+  .duration:empty { display: none; }
+  .preview-heading .thumb { width: 26px; height: 26px; border-radius: var(--r-xs); }
+  .preview-heading .thumb .duration { display: none; }
+
+  /* File list: shared */
+  .file-list { list-style: none; margin: 10px 0 0; padding: 0; }
+  .file-row { position: relative; scroll-margin: calc(var(--header) + 8px) 0 8px; }
+  .preview-file { display: flex; min-width: 0; padding: 0; border: 0; background: transparent; text-align: left; border-radius: inherit; }
+  .preview-file:focus-visible { outline-offset: -2px; }
+  .file-info { min-width: 0; flex: 1; display: block; }
+  .file-name { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--fs-sm); font-weight: var(--fw-medium); line-height: 1.45; }
+  .file-meta { display: flex; align-items: center; gap: 4px; min-width: 0; color: var(--muted); font-size: var(--fs-xs); line-height: 1.5; }
+  .file-meta span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .file-meta svg { width: 12px; height: 12px; }
+  .file-row.missing .file-name { color: var(--muted); }
+  .file-row.missing .thumb > img { filter: grayscale(1); opacity: .45; }
+  .file-row.missing .file-meta { color: var(--danger); }
+  .file-row.fresh { animation: fresh 1.6s ease-out; }
+  .more-button { display: grid; place-items: center; flex: none; padding: 0; border: 0; color: var(--muted); opacity: 0; transition: opacity .12s, background .12s; }
+  .more-button svg { width: 16px; height: 16px; }
+  .file-row:hover .more-button, .file-row:focus-within .more-button, .file-row.selected .more-button, .file-row[data-current="true"] .more-button, .more-button[aria-expanded="true"] { opacity: 1; }
+  .check { display: none; }
+
+  /* Grid view */
+  .file-list.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 14px 12px; }
+  .grid .file-row { border-radius: var(--r-md); }
+  .grid .preview-file { width: 100%; flex-direction: column; gap: 7px; padding: 0; }
+  .grid .thumb { width: 100%; aspect-ratio: 4 / 3; border-radius: var(--r-md); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 6%, transparent); transition: box-shadow .15s, transform .2s var(--ease); }
+  .grid .thumb > svg { width: 26px; height: 26px; stroke-width: 1.4; }
+  .grid .file-info { padding: 0 2px; }
+  .grid .file-meta .dir { display: none; }
+  .grid .file-row:hover .thumb { transform: translateY(-1px); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 10%, transparent), var(--shadow-md); }
+  .grid .file-row[data-current="true"] .thumb { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--ring); }
+  .grid .file-row.selected .thumb { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px color-mix(in srgb, var(--ring) 70%, transparent); }
+  .grid .file-row.selected .thumb > img { opacity: .85; }
+  .grid .more-button { position: absolute; top: 6px; right: 6px; width: 26px; height: 26px; border-radius: 999px; color: var(--text);
+    background: color-mix(in srgb, var(--surface) 84%, transparent); backdrop-filter: blur(8px); box-shadow: var(--shadow-sm), 0 0 0 .5px var(--line); }
+  .grid .more-button:hover, .grid .more-button[aria-expanded="true"] { background: var(--surface); }
+  .grid .check { position: absolute; top: 6px; left: 6px; width: 20px; height: 20px; border-radius: 999px; place-items: center; background: var(--ring); color: var(--surface); box-shadow: 0 0 0 2px var(--surface); }
+  .grid .check svg { width: 12px; height: 12px; stroke-width: 2.4; }
+  .grid .file-row.selected .check { display: grid; }
+  .grid .missing-badge { position: absolute; left: 6px; bottom: 6px; display: flex; align-items: center; gap: 3px; padding: 0 6px; border-radius: 4px; background: var(--danger-bg); color: var(--danger); font-size: 10.5px; line-height: 18px; }
+  .grid .missing-badge svg { width: 11px; height: 11px; }
+
+  /* List view */
+  .file-list.list { margin-inline: -8px; }
+  .list .file-row { display: flex; align-items: center; min-height: 52px; border-radius: var(--r-sm); }
+  .list .file-row + .file-row { margin-top: 1px; }
+  .list .file-row:hover { background: var(--hover); }
+  .list .file-row[data-current="true"] { background: var(--pressed); }
+  .list .file-row.selected, .list .file-row.selected:hover { background: var(--selected); }
+  .list .preview-file { flex: 1; align-items: center; gap: 11px; padding: 6px 4px 6px 8px; }
+  .list .thumb { width: 48px; height: 36px; border-radius: var(--r-xs); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 6%, transparent); }
+  .list .thumb .duration { display: none; }
+  .list .thumb.page > img { max-width: 70%; max-height: 78%; box-shadow: 0 0 0 1px rgb(0 0 0 / .06), 0 1px 3px -1px rgb(0 0 0 / .25); }
+  .list .file-row[data-current="true"] .thumb { box-shadow: 0 0 0 2px var(--ring); }
+  .list .more-button { width: 28px; height: 28px; margin-right: 6px; border-radius: var(--r-xs); background: transparent; }
+  .list .more-button:hover, .list .more-button[aria-expanded="true"] { background: var(--pressed); color: var(--text); }
+  .list .missing-badge { display: none; }
+
+  /* Empty state */
+  .empty-state { margin-top: 16px; display: flex; flex-direction: column; align-items: center; text-align: center; padding: 34px 20px 30px; border-radius: var(--r-lg); border: 1.5px dashed var(--line); background: var(--wash); }
+  .empty-art { position: relative; width: 132px; height: 76px; margin-bottom: 18px; }
+  .empty-art .tile { position: absolute; top: 8px; width: 56px; height: 64px; display: grid; place-items: center; border-radius: var(--r-md); background: var(--surface);
+    box-shadow: 0 0 0 1px var(--line-soft), var(--shadow-md); color: var(--kind); --kind: var(--subtle); }
+  .empty-art .tile svg { width: 22px; height: 22px; stroke-width: 1.4; }
+  .empty-art .tile:nth-child(1) { left: 6px; transform: rotate(-9deg); --kind: var(--info); }
+  .empty-art .tile:nth-child(2) { left: 38px; top: 0; z-index: 1; --kind: var(--success); }
+  .empty-art .tile:nth-child(3) { left: 70px; transform: rotate(9deg); --kind: var(--danger); }
+  h2 { margin: 0 0 6px; font-size: var(--fs-md); font-weight: var(--fw-semibold); }
+  .empty-state p { white-space: pre-line; margin: 0 0 16px; color: var(--muted); font-size: var(--fs-xs); line-height: 1.8; }
+  .empty-state.error { border-color: color-mix(in srgb, var(--danger) 40%, var(--line)); }
+  .empty-state.error h2 { color: var(--danger); }
+
+  /* Drag feedback */
+  .drop-overlay { position: fixed; inset: 8px; z-index: 20; display: none; align-items: center; justify-content: center; border: 1.5px dashed var(--ring); border-radius: var(--r-lg);
+    background: color-mix(in srgb, var(--surface) 82%, transparent); backdrop-filter: blur(3px); pointer-events: none; }
+  body.dragging .drop-overlay { display: flex; animation: fade .12s ease-out; }
+  .drop-card { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 20px 26px; border-radius: var(--r-lg); background: var(--surface); box-shadow: 0 0 0 1px var(--line), var(--shadow-menu); }
+  .drop-icon { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 999px; background: color-mix(in srgb, var(--ring) 16%, transparent); color: var(--ring); }
+  .drop-icon svg { width: 20px; height: 20px; stroke-width: 2; }
+  .drop-card strong { font-size: var(--fs-sm); font-weight: var(--fw-semibold); }
+  .drop-card span { color: var(--muted); font-size: var(--fs-xs); }
+
+  /* Context menu */
+  .file-menu { position: fixed; z-index: 30; min-width: 188px; max-width: calc(100vw - 16px); padding: 4px; background: var(--raised); border-radius: var(--r-md); box-shadow: 0 0 0 1px var(--line), var(--shadow-menu); animation: pop .12s var(--ease); transform-origin: top right; }
+  .file-menu button { display: flex; align-items: center; gap: 8px; width: 100%; height: 30px; padding: 0 10px; border: 0; border-radius: var(--r-xs); background: transparent; text-align: left; font-size: var(--fs-xs); white-space: nowrap; }
+  .file-menu button:hover, .file-menu button:focus { background: var(--hover); outline: none; }
+  .file-menu .remove { color: var(--danger); }
+  .file-menu hr { margin: 4px 6px; border: 0; border-top: 1px solid var(--line-soft); }
+
+  /* Diagnostics */
+  .diagnostics { margin: 0 var(--gutter); padding-bottom: 6px; }
+  .diagnostics > summary { list-style: none; display: flex; align-items: center; justify-content: flex-end; gap: 6px; padding: 8px 0; color: color-mix(in srgb, var(--subtle) 70%, transparent); cursor: pointer; font-size: 11px; }
+  .diagnostics[open] > summary { justify-content: flex-start; border-top: 1px solid var(--line-soft); color: var(--subtle); }
+  summary::-webkit-details-marker { display: none; }
+  .chevron { width: 11px; height: 11px; transition: transform .15s ease; }
+  .diagnostics[open] > summary .chevron { transform: rotate(90deg); }
+  .version { font-variant-numeric: tabular-nums; }
+  .diagnostic-body { padding: 0 0 8px; color: var(--muted); font-size: var(--fs-xs); }
+  .diagnostic-body h3 { margin: 14px 0 6px; font-size: var(--fs-xs); font-weight: var(--fw-medium); color: var(--text); }
+  .diagnostic-body p { margin: 8px 0; line-height: 1.7; }
+  .row { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 10px; }
+  .status { color: var(--muted); font-size: var(--fs-xs); line-height: 1.7; overflow-wrap: anywhere; }
+  pre { white-space: pre-wrap; overflow-wrap: anywhere; font: 11px/1.6 var(--mono); padding: 8px 10px; border: 1px solid var(--line-soft); border-radius: var(--r-xs); max-height: 200px; overflow: auto; margin: 4px 0 0; color: var(--muted); }
+  .raw { margin-top: 12px; }
+  .raw summary { cursor: pointer; }
+
+  /* Expanded preview: the board takes the whole panel. */
+  body.expanded #empty-state, body.expanded #file-list, body.expanded .diagnostics { display: none !important; }
+  body.expanded .preview-stage, body.expanded .preview-stage[data-kind] { height: calc(100vh - var(--header) - 116px); max-height: none; aspect-ratio: auto; min-height: 200px; }
+  body.expanded #preview-content img { max-height: none; }
+  body.expanded .preview-stage[data-kind="image"] #preview-content img { max-height: calc(100vh - var(--header) - 116px); }
+
+  @keyframes rise { from { opacity: 0; transform: translateY(4px); } }
+  @keyframes fade { from { opacity: 0; } }
+  @keyframes pop { from { opacity: 0; transform: scale(.97); } }
+  @keyframes fresh { from { background: var(--selected); } }
+  @keyframes shimmer { to { background-position: -200% 0; } }
+  @media (hover: none) { .more-button { opacity: 1; } }
+  @media (max-width: 360px) { :root { --gutter: 12px; } .bulk-bar > span { display: none; } .file-list.grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+</style>
+<svg class="symbols" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="icon-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></symbol>
+  <symbol id="icon-file" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"/><path d="M14 3v5h5"/></symbol>
+  <symbol id="icon-text" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></symbol>
+  <symbol id="icon-document" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"/><path d="M14 3v5h5M8.5 12.5l1.2 5 1.8-4 1.8 4 1.2-5"/></symbol>
+  <symbol id="icon-pdf" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"/><path d="M14 3v5h5M8 17v-4h1.5a1.5 1.5 0 0 1 0 3H8M13 13v4h1a2 2 0 0 0 0-4Z"/></symbol>
+  <symbol id="icon-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="m4 18 5-5 3.5 3.5L16 13l4 4"/></symbol>
+  <symbol id="icon-video" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m10.5 9.2 4.3 2.8-4.3 2.8Z"/></symbol>
+  <symbol id="icon-audio" viewBox="0 0 24 24"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></symbol>
+  <symbol id="icon-package" viewBox="0 0 24 24"><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9Z"/><path d="m4 7.5 8 4.5 8-4.5M12 12v9"/></symbol>
+  <symbol id="icon-plus" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></symbol>
+  <symbol id="icon-more" viewBox="0 0 24 24"><circle cx="6" cy="12" r=".9"/><circle cx="12" cy="12" r=".9"/><circle cx="18" cy="12" r=".9"/></symbol>
+  <symbol id="icon-reveal" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v3"/><path d="M3 7v11a2 2 0 0 0 2 2h6"/><circle cx="16.5" cy="16.5" r="3"/><path d="m21 21-2.3-2.3"/></symbol>
+  <symbol id="icon-external" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-8 8"/><path d="M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4"/></symbol>
+  <symbol id="icon-expand" viewBox="0 0 24 24"><path d="M15 4h5v5M9 20H4v-5M20 4l-6 6M4 20l6-6"/></symbol>
+  <symbol id="icon-collapse" viewBox="0 0 24 24"><path d="M14 10h5M14 10V5M10 14H5M10 14v5M20 4l-6 6M4 20l6-6"/></symbol>
+  <symbol id="icon-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="icon-prev" viewBox="0 0 24 24"><path d="m15 6-6 6 6 6"/></symbol>
+  <symbol id="icon-next" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+  <symbol id="icon-warning" viewBox="0 0 24 24"><path d="M12 4 2.8 19.5h18.4Z"/><path d="M12 10v4M12 17h.01"/></symbol>
+  <symbol id="icon-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></symbol>
+  <symbol id="icon-list" viewBox="0 0 24 24"><rect x="4" y="5" width="5" height="4" rx="1"/><rect x="4" y="15" width="5" height="4" rx="1"/><path d="M12 7h8M12 17h8"/></symbol>
+  <symbol id="icon-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+  <symbol id="icon-link" viewBox="0 0 16 16"><path d="m6 5-2 2a2.8 2.8 0 0 0 4 4l2-2M10 11l2-2a2.8 2.8 0 0 0-4-4L6 7"/></symbol>
+</svg>
+<header class="toolbar">
+  <div class="heading"><h1>参考</h1><span id="file-count" class="count" aria-live="polite"></span></div>
+  <div class="toolbar-actions">
+    <div id="bulk-bar" class="bulk-bar" hidden><span id="bulk-count" aria-live="polite"></span><button id="bulk-remove" class="ghost danger" type="button">移除</button><button id="bulk-clear" class="ghost" type="button">取消</button></div>
+    <div id="view-toggle" class="segmented" role="group" aria-label="显示方式"><button id="view-grid" type="button" title="缩略图" aria-label="缩略图" aria-pressed="true"><svg aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-grid"/></svg></button><button id="view-list" type="button" title="列表" aria-label="列表" aria-pressed="false"><svg aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-list"/></svg></button></div>
+    <button id="cancel-choose" class="ghost" type="button" hidden>取消选择</button>
+    <button id="choose" class="add-button" type="button" title="选择文件，支持多选" disabled><svg aria-hidden="true" viewBox="0 0 16 16"><use href="#icon-plus"/></svg><span id="choose-label">添加</span></button>
+  </div>
+</header>
+<p id="standalone-note" class="standalone-note" hidden>这是界面源文件预览，未连接插件后台。请从 Codex 对话侧栏打开「参考」。</p>
+<div id="status-line" class="status-line" hidden><span id="picker-status" role="status" aria-live="polite"></span><button id="status-action" class="link-button" type="button" hidden></button></div>
+<main aria-label="参考">
+  <section id="preview-board" class="preview-board" aria-label="参考预览" hidden>
+    <div class="preview-heading">
+      <span id="preview-icon" class="thumb" aria-hidden="true"></span>
+      <strong id="preview-title">预览</strong>
+      <div class="preview-actions">
+        <button id="preview-reveal" class="icon-button" type="button" title="Show in Finder" aria-label="在 Finder 中显示"><svg aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-reveal"/></svg></button>
+        <button id="preview-open" class="icon-button" type="button" title="用默认应用打开" aria-label="用默认应用打开"><svg aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-external"/></svg></button>
+        <button id="expand-preview" class="icon-button" type="button" title="放大预览" aria-label="放大预览" aria-pressed="false"><svg aria-hidden="true" viewBox="0 0 24 24"><use id="expand-icon" href="#icon-expand"/></svg></button>
+        <button id="close-preview" class="icon-button" type="button" title="关闭预览" aria-label="关闭预览"><svg aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-close"/></svg></button>
+      </div>
+    </div>
+    <div id="preview-stage" class="preview-stage" tabindex="-1" aria-busy="false">
+      <div id="preview-content"></div>
+      <div id="preview-message" class="preview-message" hidden><svg aria-hidden="true" viewBox="0 0 24 24"><use id="preview-message-icon" href="#icon-file"/></svg><div id="preview-message-text"></div><div id="preview-message-actions" class="message-actions"></div></div>
+      <div id="preview-progress" class="preview-progress" aria-hidden="true" hidden><span id="progress-label">正在加载…</span><div class="progress-track"><div id="progress-bar" class="progress-bar"></div></div></div>
+    </div>
+    <div class="preview-bottom"><span id="preview-status" role="status"></span><button id="retry-preview" class="link-button" type="button" hidden>重试</button><div id="page-controls" class="page-controls" hidden><button id="previous-page" class="icon-button" type="button" aria-label="上一页"><svg aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-prev"/></svg></button><span id="page-number"></span><button id="next-page" class="icon-button" type="button" aria-label="下一页"><svg aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-next"/></svg></button></div></div>
+  </section>
+  <div id="empty-state" class="empty-state">
+    <div class="empty-art" aria-hidden="true"><span class="tile"><svg viewBox="0 0 24 24"><use href="#icon-video"/></svg></span><span class="tile"><svg viewBox="0 0 24 24"><use href="#icon-image"/></svg></span><span class="tile"><svg viewBox="0 0 24 24"><use href="#icon-pdf"/></svg></span></div>
+    <h2 id="empty-title">把参考放在手边</h2>
+    <p id="empty-text">拖入视频、图片或文档，或点「添加」多选
+列表跟随当前对话，仅保存路径</p>
+    <button id="empty-add" class="add-button" type="button" disabled><svg aria-hidden="true" viewBox="0 0 16 16"><use href="#icon-plus"/></svg>添加参考</button>
+    <button id="empty-retry" class="pill" type="button" hidden>重试</button>
+  </div>
+  <ul id="file-list" class="file-list grid" aria-label="参考文件列表" hidden></ul>
+</main>
+<div class="drop-overlay" aria-hidden="true"><div class="drop-card"><span class="drop-icon"><svg viewBox="0 0 16 16"><use href="#icon-plus"/></svg></span><strong id="drop-title">松开添加参考</strong><span>仅保存路径，不复制原文件</span></div></div>
+<details class="diagnostics">
+  <summary><svg class="chevron" aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-next"/></svg>诊断信息<span class="version">0.6.1</span></summary>
+  <div class="diagnostic-body">
+    <div id="bridge" class="status">正在连接…</div>
+    <div class="row"><button id="refresh" class="pill" type="button" disabled>刷新</button><button id="save" class="pill" type="button" disabled>保存记录</button><button id="copy" class="pill" type="button">复制诊断</button></div>
+    <div id="saved" class="status" role="status" aria-live="polite"></div>
+    <pre id="copy-fallback" hidden></pre>
+    <h3>文件选择结果</h3><pre id="picker-data">[]</pre>
+    <h3>拖放诊断</h3><div id="drop-status" class="status">尚无拖放记录</div><pre id="drop-data">[]</pre>
+    <h3>项目身份线索</h3><pre id="identity">等待宿主数据</pre>
+    <p>服务目录与浏览器虚拟路径不代表当前项目或原文件路径。</p>
+    <details class="raw"><summary>宿主上下文</summary><pre id="host">{}</pre></details>
+    <details class="raw"><summary>工具元数据</summary><pre id="tool">{}</pre></details>
+  </div>
+</details>
+<div id="file-menu" class="file-menu" role="menu" aria-label="参考文件操作" hidden></div>
+<script>
+(() => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const VERSION = '0.6.1';
+  const state = { schema: 3, version: VERSION, panelInstance: crypto.randomUUID(), openedAt: new Date().toISOString(), host: {}, toolContext: null, drops: [], selections: [], references: [], events: [] };
+  const pending = new Map(); let rpcId = 0, ready = false, picking = false, resolving = false, actionBusy = false;
+  // List persistence: local edits are ops replayed onto the server's latest list.
+  let listRevision = null, listLoaded = false, restoreError = null, pendingOps = [], saveLoop = null;
+  // 'conversation' when the host names this chat (Codex); otherwise one shared list.
+  let listScope = 'conversation';
+  // Explicit multi-selection (Cmd/Shift click, Cmd+A); a plain click previews instead.
+  let selected = new Set(), anchorPath = null, lastUndo = null, statusTimer = null, hostVariables = [];
+  let previewSerial = 0, activePreview = null, activeLease = null, activeBlob = null, staleBlobs = [], previewTimer = null;
+  const rows = new Map();
+  // Quick Look thumbnails, keyed by path; fetched only for visible rows.
+  const thumbs = new Map(); let thumbQueue = [], thumbBusy = false;
+  const thumbObserver = typeof IntersectionObserver === 'function'
+    ? new IntersectionObserver(entries => entries.forEach(entry => { if(entry.isIntersecting) requestThumb(entry.target.dataset.path); }), {rootMargin:'240px'}) : null;
+  let view = 'grid';
+  try { if(['grid','list'].includes(localStorage.getItem('codex-reference-panel.view'))) view=localStorage.getItem('codex-reference-panel.view'); } catch { /* storage may be unavailable */ }
+  const stringify = value => JSON.stringify(value, null, 2);
+  const errorText = error => error?.message || String(error);
+  const KINDS = [
+    ['video', /^(mp4|mov|m4v|webm|mkv|avi|mpg|mpeg|mts|m2ts|3gp|wmv|flv)$/], ['audio', /^(mp3|m4a|wav|ogg|aac|flac|aiff?)$/],
+    ['image', /^(png|jpe?g|gif|webp|svg|avif|bmp|heic|heif|tiff?)$/], ['pdf', /^pdf$/],
+    ['document', /^(docx?|rtfd?|odt|pages|key|numbers|xlsx?|pptx?|epub)$/],
+    ['text', /^(txt|md|markdown|json|csv|tsv|log|ya?ml|toml|ini|conf|xml|html?|srt|vtt|ass|sh|py|js|ts|jsx|tsx|css|swift)$/]];
+  const KIND_LABEL = {video:'视频', audio:'音频', image:'图片', pdf:'PDF', document:'文档', text:'文本', package:'文件包', file:'文件'};
+  function event(type, data) { state.events.push({ time: new Date().toISOString(), type, data }); state.events = state.events.slice(-40); }
+  function notify(method, params) { window.parent.postMessage({jsonrpc:'2.0',method,params}, '*'); }
+  function request(method, params, timeout = 12000) {
+    return new Promise((resolve,reject) => {
+      const id = ++rpcId;
+      const timer = setTimeout(() => { pending.delete(id); reject(Error(method + ' 等待宿主响应超时')); }, timeout);
+      pending.set(id, {resolve,reject,timer});
+      window.parent.postMessage({jsonrpc:'2.0',id,method,params}, '*');
+    });
+  }
+  function identityFields(value, prefix = '', depth = 0, out = []) {
+    if (!value || typeof value !== 'object' || depth > 8) return out;
+    for (const [key, child] of Object.entries(value)) {
+      const path = prefix ? prefix + '.' + key : key;
+      if (/project|thread.?id|conversation.?id|workspace|\bcwd\b|working.?directory/i.test(key)) out.push({field:path,value:child});
+      else if (child && typeof child === 'object') identityFields(child,path,depth+1,out);
+    }
+    return out;
+  }
+  function icon(name) {
+    const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+    svg.setAttribute('viewBox','0 0 24 24'); svg.setAttribute('aria-hidden','true');
+    const use=document.createElementNS('http://www.w3.org/2000/svg','use');
+    use.setAttribute('href','#icon-'+name); svg.append(use); return svg;
+  }
+  function node(tag,className,text) {
+    const el=document.createElement(tag); if(className) el.className=className;
+    if(text!==undefined) el.textContent=text; return el;
+  }
+  function fileSize(size) {
+    if(typeof size!=='number') return '';
+    if(size<1024) return size+' B';
+    if(size<1024*1024) return (size/1024).toFixed(0)+' KB';
+    if(size<1024*1024*1024) return (size/(1024*1024)).toFixed(1)+' MB';
+    return (size/(1024*1024*1024)).toFixed(1)+' GB';
+  }
+  async function copyText(text) {
+    try { await navigator.clipboard.writeText(text); return true; }
+    catch {
+      const area=document.createElement('textarea'); area.value=text; document.body.append(area); area.select();
+      const copied=document.execCommand('copy'); area.remove(); return copied;
+    }
+  }
+  const nameOf = file => file.name || file.path.split(/[\\/]/).pop();
+  const extOf = file => { const name=nameOf(file); return name.includes('.') ? name.split('.').pop().toLowerCase() : ''; };
+  function fileKind(file) {
+    const ext=extOf(file);
+    if(file.isPackage && !/^(rtfd)$/.test(ext)) return KINDS.find(([,re])=>re.test(ext))?.[0]==='document' ? 'document' : 'package';
+    return KINDS.find(([,re])=>re.test(ext))?.[0] || 'file';
+  }
+  const iconFor = kind => kind==='file' ? 'file' : kind;
+  const PAGE_KINDS = new Set(['pdf','document','text']);
+  function duration(seconds) {
+    if(!(seconds>0)) return '';
+    const total=Math.round(seconds), h=Math.floor(total/3600), m=Math.floor(total%3600/60), sec=String(total%60).padStart(2,'0');
+    return h ? h+':'+String(m).padStart(2,'0')+':'+sec : m+':'+sec;
+  }
+  const isMissing = file => file.exists===false;
+  function shortDirectory(file) {
+    const name=nameOf(file);
+    const directory=file.path.slice(0,file.path.length-name.length).replace(/[\\/]$/,'') || '/';
+    const home=directory.match(/^\/Users\/[^/]+(\/.*)?$/);
+    const shown=home ? '~'+(home[1] || '') : directory;
+    const parts=shown.split('/').filter(Boolean);
+    return parts.length>3 ? '…/'+parts.slice(-2).join('/') : shown;
+  }
+
+  // ----- Status line -----
+  function setStatus(text, {error=false, sticky=error, action=null}={}) {
+    clearTimeout(statusTimer);
+    const line=$('status-line');
+    $('picker-status').textContent=text || '';
+    line.hidden=!text; line.classList.toggle('error', Boolean(error));
+    const button=$('status-action'); button.hidden=!action;
+    button.textContent=action?.label || ''; button.onclick=action ? (()=>{ setStatus(''); action.run(); }) : null;
+    if(text && !sticky) statusTimer=setTimeout(()=>setStatus(''), action ? 8000 : 4000);
+  }
+
+  // ----- Theme -----
+  function applyHostTheme() {
+    const context=state.host.hostContext || {};
+    const root=document.documentElement;
+    if(context.theme==='light' || context.theme==='dark') { root.style.colorScheme=context.theme; root.dataset.theme=context.theme; }
+    const variables=context.styles?.variables;
+    if(!variables || typeof variables!=='object') return;
+    hostVariables.forEach(name=>root.style.removeProperty(name));
+    hostVariables=[];
+    for(const [name,value] of Object.entries(variables)) {
+      if(/^--[a-z0-9-]+$/i.test(name) && typeof value==='string' && value.length<300 && !/url\(/i.test(value)) {
+        root.style.setProperty(name,value); hostVariables.push(name);
+      }
+    }
+  }
+
+  // ----- List model -----
+  function applyOps(list, ops) {
+    let out=list.slice();
+    for(const op of ops) {
+      if(op.type==='add') { const known=new Set(out.map(f=>f.path)); out=out.concat(op.files.filter(f=>!known.has(f.path))); }
+      else if(op.type==='remove') { const gone=new Set(op.paths); out=out.filter(f=>!gone.has(f.path)); }
+      else if(op.type==='replace') {
+        // Relink keeps the row's position; a duplicate of the new path goes.
+        out=out.filter(f=>f.path!==op.file.path || f.path===op.oldPath);
+        const at=out.findIndex(f=>f.path===op.oldPath);
+        if(at>=0) out[at]=op.file; else out.push(op.file);
+      } else if(op.type==='restore') {
+        for(const {index,file} of op.items.slice().sort((a,b)=>a.index-b.index)) {
+          if(!out.some(f=>f.path===file.path)) out.splice(Math.min(index,out.length),0,file);
+        }
+      }
+    }
+    return out;
+  }
+  function commit(op) {
+    pendingOps.push(op);
+    state.references=applyOps(state.references,[op]);
+    const paths=new Set(state.references.map(f=>f.path));
+    selected=new Set([...selected].filter(p=>paths.has(p)));
+    if(activePreview && !paths.has(activePreview.file.path)) closePreview();
+    renderFiles(); void persist();
+  }
+  function adoptList(references, revision) {
+    if(!Array.isArray(references) || typeof revision!=='number') return;
+    if(listLoaded && revision<listRevision) return;
+    listRevision=revision; listLoaded=true; restoreError=null;
+    state.references=applyOps(references.filter(f=>f && typeof f.path==='string'), pendingOps);
+    const paths=new Set(state.references.map(f=>f.path));
+    selected=new Set([...selected].filter(p=>paths.has(p)));
+    if(activePreview) {
+      const fresh=state.references.find(f=>f.path===activePreview.file.path);
+      if(fresh) activePreview.file=fresh;
+    }
+    if(pendingOps.length) void persist();
+  }
+  function persist() {
+    if(saveLoop || !ready) return saveLoop || Promise.resolve(!pendingOps.length);
+    saveLoop=(async()=>{
+      for(let attempt=0; pendingOps.length && attempt<4; attempt++) {
+        const sent=pendingOps.length;
+        try {
+          const response=await callTool('save_reference_list',{references:state.references,baseRevision:listLoaded?listRevision:null},10000);
+          const outcome=response?.list;
+          if(outcome?.status==='saved') { listRevision=outcome.revision; listLoaded=true; pendingOps.splice(0,sent); attempt=-1; continue; }
+          if(outcome?.status==='conflict') {
+            // Another panel or an unread list won: replay our edits onto it.
+            listRevision=outcome.revision; listLoaded=true;
+            state.references=applyOps(outcome.references || [],pendingOps); renderFiles(); continue;
+          }
+          throw Error('宿主没有确认保存');
+        } catch(error) {
+          setStatus('参考列表未能保存：'+errorText(error),{error:true,action:{label:'重试',run:()=>void persist()}});
+          event('list-save-error',errorText(error)); return false;
+        }
+      }
+      return !pendingOps.length;
+    })().finally(()=>{ saveLoop=null; });
+    return saveLoop;
+  }
+  async function flushList() {
+    while(saveLoop) await saveLoop;
+    if(pendingOps.length) await persist();
+    return !pendingOps.length;
+  }
+
+  // ----- Rendering -----
+  function rowParts(file) {
+    let row=rows.get(file.path);
+    if(!row) {
+      const li=node('li','file-row'); li.dataset.path=file.path;
+      const preview=node('button','preview-file'); preview.type='button'; preview.dataset.role='preview';
+      const mark=node('span','thumb'); mark.setAttribute('aria-hidden','true');
+      const check=node('span','check'); check.append(icon('check'));
+      const info=node('span','file-info');
+      const title=node('span','file-name'); const meta=node('span','file-meta');
+      info.append(title,meta);
+      const selectedNote=node('span','visually-hidden');
+      preview.append(mark,info,selectedNote);
+      const more=node('button','more-button'); more.type='button'; more.dataset.role='more';
+      more.title='更多操作'; more.setAttribute('aria-haspopup','menu'); more.setAttribute('aria-expanded','false'); more.append(icon('more'));
+      preview.addEventListener('click',e=>rowClick(li.dataset.path,e));
+      more.addEventListener('click',e=>{
+        e.stopPropagation();
+        if(!$('file-menu').hidden && menuTrigger?.path===li.dataset.path) closeMenu(true); else menuFor(li.dataset.path,{anchor:more});
+      });
+      li.addEventListener('contextmenu',e=>{ e.preventDefault(); menuFor(li.dataset.path,{x:e.clientX,y:e.clientY}); });
+      li.append(preview,more,check);
+      row={li,preview,mark,title,meta,more,selectedNote,key:''};
+      rows.set(file.path,row);
+      thumbObserver?.observe(li);
+    }
+    return row;
+  }
+  function updateRow(row, file) {
+    const name=nameOf(file), kind=fileKind(file), missing=isMissing(file);
+    const current=activePreview?.file.path===file.path, chosen=selected.has(file.path);
+    const thumb=thumbs.get(file.path);
+    const key=[name,kind,missing,file.size,file.exists,current,chosen,thumb?.state,thumb?.url,thumb?.duration].join('|');
+    if(row.key===key) return;
+    row.key=key;
+    row.li.classList.toggle('missing',missing); row.li.classList.toggle('selected',chosen);
+    row.li.dataset.current=String(current);
+    if(current) row.preview.setAttribute('aria-current','true'); else row.preview.removeAttribute('aria-current');
+    paintThumb(row.mark,file,kind);
+    if(missing) { const badge=node('span','missing-badge'); badge.append(icon('warning'),node('span','','已失效')); row.mark.append(badge); }
+    row.title.textContent=name; row.title.title=name;
+    const ext=extOf(file).toUpperCase().slice(0,6);
+    if(missing) row.meta.replaceChildren(icon('warning'),node('span','','文件已不在原位置'));
+    else row.meta.replaceChildren(node('span','',[ext || KIND_LABEL[kind],duration(thumb?.duration),fileSize(file.size)].filter(Boolean).join(' · ')),node('span','dir','· '+shortDirectory(file)));
+    row.meta.title=file.path;
+    row.preview.setAttribute('aria-label',(missing?'已失效：':'预览 ')+name);
+    row.selectedNote.textContent=chosen?'，已选中':'';
+    row.more.setAttribute('aria-label',name+' 的更多操作');
+  }
+  function renderFiles() {
+    const files=state.references;
+    $('file-count').textContent=files.length ? String(files.length) : '';
+    const empty=files.length===0;
+    $('empty-state').hidden=!empty; $('file-list').hidden=empty;
+    $('empty-state').classList.toggle('error',Boolean(restoreError) && empty);
+    $('empty-title').textContent=restoreError && empty ? '暂时无法读取参考列表' : '把参考放在手边';
+    $('empty-text').textContent=restoreError && empty ? restoreError : '拖入视频、图片或文档，或点「添加」多选\n'+(listScope==='shared'?'所有对话共用这份列表，仅保存路径':'列表跟随当前对话，仅保存路径');
+    $('file-count').title=listScope==='shared'?'所有对话共用这份列表':'列表跟随当前对话';
+    $('empty-retry').hidden=!(restoreError && empty); $('empty-add').hidden=Boolean(restoreError);
+    const list=$('file-list');
+    const wanted=new Set(files.map(f=>f.path));
+    for(const [path,row] of rows) if(!wanted.has(path)) { thumbObserver?.unobserve(row.li); row.li.remove(); rows.delete(path); releaseThumb(path); }
+    list.classList.toggle('grid',view==='grid'); list.classList.toggle('list',view==='list');
+    // Reconcile in place: unchanged rows keep their nodes, so focus survives.
+    let cursor=list.firstChild;
+    for(const file of files) {
+      const row=rowParts(file); updateRow(row,file);
+      if(row.li!==cursor) list.insertBefore(row.li,cursor); else cursor=cursor.nextSibling;
+    }
+    const count=selected.size;
+    $('bulk-bar').hidden=count===0; $('bulk-count').textContent=count ? '已选 '+count+' 项' : '';
+    $('view-toggle').hidden=count>0 || empty;
+    $('view-grid').setAttribute('aria-pressed',String(view==='grid')); $('view-list').setAttribute('aria-pressed',String(view==='list'));
+    // Without an observer (tests), fetch all; with one, refresh changed files.
+    files.forEach(f=>{ const t=thumbs.get(f.path); if(!thumbObserver || (t && t.key!==thumbKey(f))) requestThumb(f.path); });
+    if(thumbQueue.length) void pumpThumbs();
+  }
+  function paintThumb(target, file, kind) {
+    const thumb=thumbs.get(file.path);
+    target.dataset.kind=kind; target.dataset.state=thumb?.state || 'none';
+    target.classList.toggle('page',PAGE_KINDS.has(kind) && thumb?.state==='ready');
+    const parts=[];
+    if(thumb?.state==='ready') { const img=node('img',''); img.alt=''; img.draggable=false; img.src=thumb.url; img.addEventListener('error',()=>{ thumb.state='none'; renderFiles(); }); parts.push(img); }
+    else parts.push(icon(iconFor(kind)));
+    const time=duration(thumb?.duration);
+    if(time) parts.push(node('span','duration',time));
+    target.replaceChildren(...parts);
+  }
+  const thumbKey = file => [file.path,file.size,file.lastModified].join('|');
+  function requestThumb(path) {
+    const file=state.references.find(f=>f.path===path);
+    if(!file || isMissing(file)) return;
+    const key=thumbKey(file), current=thumbs.get(path);
+    if(current && current.key===key) return;
+    if(current?.url) URL.revokeObjectURL(current.url);
+    thumbs.set(path,{key,state:'pending'}); thumbQueue.push(path);
+    void pumpThumbs();
+  }
+  function releaseThumb(path) {
+    const thumb=thumbs.get(path);
+    if(thumb?.url) URL.revokeObjectURL(thumb.url);
+    thumbs.delete(path);
+  }
+  async function pumpThumbs() {
+    if(thumbBusy || !ready) return;
+    thumbBusy=true;
+    try {
+      while(thumbQueue.length) {
+        // New files must reach the server list before it will thumbnail them.
+        if(!await flushList()) break;
+        const batch=[...new Set(thumbQueue.splice(0,6))].filter(p=>thumbs.get(p)?.state==='pending');
+        if(!batch.length) continue;
+        let items={};
+        try { items=(await callTool('read_reference_thumbnails',{paths:batch},45000))?.referenceThumbnails || {}; }
+        catch(error) { event('thumbnail-error',errorText(error)); }
+        for(const path of batch) {
+          const thumb=thumbs.get(path), item=items[path];
+          if(!thumb || thumb.state!=='pending') continue;
+          if(item?.duration>0) thumb.duration=item.duration;
+          if(item?.status==='ok' && /^image\/(jpeg|png)$/.test(item.mime) && typeof item.data==='string' && item.data.length<600000) {
+            const decoded=atob(item.data), bytes=new Uint8Array(decoded.length);
+            for(let i=0;i<decoded.length;i++) bytes[i]=decoded.charCodeAt(i);
+            thumb.url=URL.createObjectURL(new Blob([bytes],{type:item.mime})); thumb.state='ready';
+          } else thumb.state='none';
+        }
+        renderFiles();
+        if(activePreview && batch.includes(activePreview.file.path)) paintThumb($('preview-icon'),activePreview.file,fileKind(activePreview.file));
+      }
+    } finally { thumbBusy=false; }
+  }
+  function setView(next) {
+    view=next;
+    try { localStorage.setItem('codex-reference-panel.view',view); } catch { /* storage may be unavailable */ }
+    renderFiles();
+  }
+  $('view-grid').addEventListener('click',()=>setView('grid'));
+  $('view-list').addEventListener('click',()=>setView('list'));
+  function renderDiagnostics() {
+    $('host').textContent = stringify(state.host);
+    $('tool').textContent = stringify(state.toolContext || {});
+    $('identity').textContent = stringify({hostFields:identityFields(state.host),toolMetadataFields:identityFields(state.toolContext?.requestMeta),serverCwd:state.toolContext?.serverCwd || null,serverCwdMeaning:'服务进程目录，不代表当前项目'});
+    $('drop-data').textContent = stringify(state.drops);
+    $('picker-data').textContent = stringify(state.selections);
+  }
+  function render() { applyHostTheme(); renderDiagnostics(); renderFiles(); }
+  function focusRow(path, role='preview') {
+    const row=rows.get(path); if(!row) return;
+    (role==='more'?row.more:row.preview).focus({preventScroll:false});
+  }
+  const focusedPath = () => document.activeElement?.closest?.('.file-row')?.dataset.path || null;
+
+  // ----- Selection and keyboard -----
+  function rowClick(path, e) {
+    const file=state.references.find(f=>f.path===path); if(!file) return;
+    if(e?.metaKey || e?.ctrlKey) {
+      if(selected.has(path)) selected.delete(path); else selected.add(path);
+      anchorPath=path; renderFiles(); return;
+    }
+    if(e?.shiftKey && anchorPath) { selectRange(anchorPath,path); renderFiles(); return; }
+    anchorPath=path;
+    if(selected.size) { selected.clear(); renderFiles(); }
+    // A second click on the file being shown must not restart or re-download it.
+    if(activePreview?.file.path===path && activePreview.status!=='error') return;
+    fileAction('preview',file);
+  }
+  function selectRange(from, to) {
+    const paths=state.references.map(f=>f.path);
+    const a=paths.indexOf(from), b=paths.indexOf(to);
+    if(a<0 || b<0) return;
+    selected=new Set(paths.slice(Math.min(a,b),Math.max(a,b)+1));
+  }
+  function columns() {
+    if(view!=='grid') return 1;
+    // Items sharing the first item's top form one grid row.
+    const items=[...$('file-list').children], top=items[0]?.getBoundingClientRect().top;
+    return Math.max(1,items.filter(item=>Math.abs(item.getBoundingClientRect().top-top)<2).length);
+  }
+  function moveFocus(path, delta, extend) {
+    const paths=state.references.map(f=>f.path);
+    if(!paths.length) return;
+    const index=path ? paths.indexOf(path) : -1;
+    const next=delta===Infinity ? paths.length-1 : delta===-Infinity ? 0 : Math.max(0,Math.min(paths.length-1,index+delta));
+    if(extend) { if(!anchorPath) anchorPath=path || paths[next]; selectRange(anchorPath,paths[next]); renderFiles(); }
+    else anchorPath=paths[next];
+    focusRow(paths[next]);
+  }
+  $('file-list').addEventListener('keydown',e=>{
+    const path=focusedPath();
+    if(e.key==='ArrowRight' || e.key==='ArrowLeft') { e.preventDefault(); moveFocus(path,e.key==='ArrowRight'?1:-1,e.shiftKey); }
+    else if(e.key==='ArrowDown' || e.key==='ArrowUp') { e.preventDefault(); const step=columns(); moveFocus(path,e.key==='ArrowDown'?step:-step,e.shiftKey); }
+    else if(e.key==='Home' || e.key==='End') { e.preventDefault(); moveFocus(path,e.key==='End'?Infinity:-Infinity,e.shiftKey); }
+    else if((e.key==='a' || e.key==='A') && (e.metaKey || e.ctrlKey)) { e.preventDefault(); selected=new Set(state.references.map(f=>f.path)); renderFiles(); }
+    else if(e.key==='Delete' || e.key==='Backspace') {
+      e.preventDefault();
+      const paths=selected.size ? [...selected] : path ? [path] : [];
+      if(paths.length) removeReferences(paths,{focusAfter:true});
+    } else if(e.key==='Escape' && selected.size) { e.preventDefault(); e.stopPropagation(); selected.clear(); renderFiles(); }
+    else if(e.key==='ContextMenu' || (e.key==='F10' && e.shiftKey)) {
+      if(path) { e.preventDefault(); menuFor(path,{anchor:rows.get(path)?.more}); }
+    }
+  });
+  $('bulk-remove').addEventListener('click',()=>removeReferences([...selected]));
+  $('bulk-clear').addEventListener('click',()=>{ selected.clear(); renderFiles(); });
+
+  function removeReferences(paths, {focusAfter=false}={}) {
+    const order=state.references.map(f=>f.path);
+    const items=paths.map(p=>({index:order.indexOf(p),file:state.references.find(f=>f.path===p)})).filter(i=>i.file);
+    if(!items.length) return;
+    let nextFocus=null;
+    if(focusAfter) {
+      const gone=new Set(paths), last=Math.max(...items.map(i=>i.index));
+      nextFocus=order.slice(last+1).find(p=>!gone.has(p)) || order.slice(0,last).reverse().find(p=>!gone.has(p)) || null;
+    }
+    commit({type:'remove',paths:items.map(i=>i.file.path)});
+    event('reference-removed',{count:items.length});
+    lastUndo={type:'restore',items};
+    setStatus(items.length>1 ? '已移除 '+items.length+' 个参考，原文件保留' : '已移除参考，原文件保留',
+      {action:{label:'撤销',run:()=>{ if(lastUndo) { commit(lastUndo); lastUndo=null; setStatus('已恢复'); } }}});
+    if(nextFocus) focusRow(nextFocus); else if(focusAfter) $('choose').focus();
+  }
+
+  // ----- Context menu -----
+  let menuTrigger=null;
+  function closeMenu(restoreFocus=false) {
+    const menu=$('file-menu'); if(menu.hidden) return;
+    menu.hidden=true;
+    if(menuTrigger) { menuTrigger.more?.setAttribute('aria-expanded','false'); if(restoreFocus) focusRow(menuTrigger.path,menuTrigger.role); }
+    menuTrigger=null;
+  }
+  function menuFor(path, {anchor=null,x=0,y=0}={}) {
+    const file=state.references.find(f=>f.path===path); if(!file) return;
+    if(selected.size && !selected.has(path)) { selected.clear(); renderFiles(); }
+    const targets=selected.size>1 ? state.references.filter(f=>selected.has(f.path)) : [file];
+    const items=targets.length>1 ? [
+      ['复制 '+targets.length+' 个路径',async()=>{ const copied=await copyText(targets.map(f=>f.path).join('\n')); setStatus(copied?'路径已复制':'无法复制路径',{error:!copied}); }],
+      null,
+      ['移除 '+targets.length+' 个参考',()=>removeReferences(targets.map(f=>f.path),{focusAfter:true}),'remove'],
+    ] : [
+      ['在面板预览',()=>fileAction('preview',file)],
+      ['Show in Finder',()=>fileAction('reveal',file)],
+      ['用默认应用打开',()=>fileAction('open',file)],
+      ['复制路径',async()=>{ const copied=await copyText(file.path); setStatus(copied?'路径已复制':'无法复制路径',{error:!copied}); }],
+      ...(isMissing(file) ? [['重新定位…',()=>choose({relink:file})]] : []),
+      null,
+      ['移除参考',()=>removeReferences([file.path],{focusAfter:true}),'remove'],
+    ];
+    const menu=$('file-menu'); menu.replaceChildren();
+    for(const item of items) {
+      if(!item) { menu.append(node('hr','')); continue; }
+      const [label,run,className]=item;
+      const b=node('button',className||'',label); b.type='button'; b.tabIndex=-1; b.setAttribute('role','menuitem');
+      b.addEventListener('click',()=>{ closeMenu(false); run(); });
+      menu.append(b);
+    }
+    const row=rows.get(path);
+    if(menuTrigger) menuTrigger.more?.setAttribute('aria-expanded','false');
+    menuTrigger={path,role:anchor?'more':'preview',more:row?.more};
+    row?.more.setAttribute('aria-expanded','true');
+    menu.hidden=false;
+    const width=menu.offsetWidth || 200, height=menu.offsetHeight || 200;
+    const viewW=window.innerWidth || 360, viewH=window.innerHeight || 600;
+    let left=x, top=y;
+    if(anchor || (!x && !y)) {
+      const rect=(anchor || row?.li)?.getBoundingClientRect?.() || {right:140,bottom:100,top:100};
+      left=rect.right-width; top=rect.bottom+4;
+      if(top+height>viewH-8) top=rect.top-height-4;
+    }
+    menu.style.left=Math.max(8,Math.min(left,viewW-width-8))+'px';
+    menu.style.top=Math.max(8,Math.min(top,viewH-height-8))+'px';
+    menu.querySelector('button')?.focus();
+  }
+  $('file-menu').addEventListener('keydown',e=>{
+    const buttons=[...$('file-menu').querySelectorAll('button')];
+    const index=buttons.indexOf(document.activeElement);
+    const go=i=>{ e.preventDefault(); buttons[(i+buttons.length)%buttons.length]?.focus(); };
+    if(e.key==='ArrowDown') go(index+1); else if(e.key==='ArrowUp') go(index-1);
+    else if(e.key==='Home') go(0); else if(e.key==='End') go(buttons.length-1);
+    else if(e.key==='Escape') { e.preventDefault(); e.stopPropagation(); closeMenu(true); }
+    else if(e.key==='Tab') closeMenu(false);
+  });
+  document.addEventListener('pointerdown',e=>{ if(!$('file-menu').contains(e.target) && !e.target?.closest?.('.more-button')) closeMenu(); });
+  window.addEventListener('blur',()=>closeMenu());
+  window.addEventListener('resize',()=>closeMenu());
+  document.addEventListener('scroll',()=>closeMenu(),true);
+  document.addEventListener('keydown',e=>{
+    if(e.key!=='Escape') return;
+    if(!$('file-menu').hidden) { closeMenu(true); return; }
+    if(document.body.classList.contains('expanded')) setExpanded(false);
+  });
+
+  // ----- Host bridge -----
+  function acceptTool(result) {
+    if (result?.isError) {
+      const error=Error(result.content?.find(c=>c.type==='text')?.text || '工具调用失败');
+      error.code=result.structuredContent?.error?.code; throw error;
+    }
+    if (result?.structuredContent?.probeContext) state.toolContext = result.structuredContent.probeContext;
+    renderDiagnostics();
+    return {...result?.structuredContent,referencePreview:result?._meta?.referencePreview,referenceChunk:result?._meta?.referenceChunk,referenceThumbnails:result?._meta?.referenceThumbnails};
+  }
+  function answerHost(m) {
+    const reply=result=>window.parent.postMessage({jsonrpc:'2.0',id:m.id,result},'*');
+    if(m.method==='ping') reply({});
+    else if(m.method==='ui/resource-teardown') { closePreview(); reply({}); }
+    else window.parent.postMessage({jsonrpc:'2.0',id:m.id,error:{code:-32601,message:'Method not found'}},'*');
+  }
+  window.addEventListener('message', e => {
+    if (e.source !== window.parent || e.data?.jsonrpc !== '2.0') return;
+    const m = e.data;
+    // Host requests carry a method; only method-less messages answer ours.
+    if (typeof m.method === 'string') {
+      if ('id' in m && m.id !== null) { answerHost(m); return; }
+      if (m.method === 'ui/notifications/host-context-changed') {
+        state.host.hostContext = {...state.host.hostContext,...m.params}; event('host-context-changed',{theme:m.params?.theme}); applyHostTheme(); renderDiagnostics();
+      } else if (m.method === 'ui/notifications/tool-result') {
+        try { acceptTool(m.params); } catch(error) { event('tool-error',errorText(error)); }
+      }
+      return;
+    }
+    if (pending.has(m.id)) {
+      const p = pending.get(m.id); clearTimeout(p.timer); pending.delete(m.id);
+      m.error ? p.reject(m.error) : p.resolve(m.result);
+    }
+  });
+  async function callTool(name,args={},timeout=12000) {
+    const result=await request('tools/call',{name,arguments:args},timeout);
+    // Byte chunks are short-lived; never render or persist their payloads.
+    if(name==='read_reference_preview_chunk') {
+      if(result?.isError) throw Error(result.content?.find(c=>c.type==='text')?.text || '预览读取失败');
+      return {referenceChunk:result?._meta?.referenceChunk};
+    }
+    return acceptTool(result);
+  }
+  async function refresh() {
+    try {
+      const response=await callTool('read_probe_context');
+      // An in-flight save will report the newer revision itself.
+      if(response?.listScope==='shared' || response?.listScope==='conversation') listScope=response.listScope;
+      if(!saveLoop) adoptList(response?.references,response?.listRevision);
+      event('context-refreshed',state.toolContext?.requestMeta); $('bridge').textContent='已连接原生 MCP Apps 宿主';
+    } catch(error) {
+      $('bridge').textContent=errorText(error); event('context-error',errorText(error));
+      if(!listLoaded) restoreError='参考列表读取失败：'+errorText(error);
+    }
+    renderFiles();
+  }
+  // Compact, bounded diagnostics; the reference list itself is saved separately.
+  const snapshot = () => ({schema:state.schema,version:VERSION,panelInstance:state.panelInstance,openedAt:state.openedAt,
+    hostInfo:state.host.hostInfo || null,theme:state.host.hostContext?.theme || null,referenceCount:state.references.length,listRevision,listScope,
+    pendingOps:pendingOps.length,events:state.events,
+    drops:state.drops.slice(-5).map(d=>({...d,strings:d.strings.map(s=>({type:s.type,value:s.value.slice(0,2000)}))})),
+    selections:state.selections.map(s=>({time:s.time,status:s.status,source:s.source,fileCount:s.files?.length || 0})),
+    toolContext:state.toolContext,capturedAt:new Date().toISOString()});
+  async function saveDiagnostics() {
+    if (!ready) return false;
+    try {
+      const r = await callTool('save_probe_snapshot',{snapshot:snapshot()});
+      $('saved').textContent = r?.saved ? '已保存本机记录 · ' + r.eventId : '宿主未确认保存';
+      return Boolean(r?.saved);
+    } catch(error) { $('saved').textContent='保存失败：'+errorText(error); return false; }
+  }
+
+  // ----- File actions -----
+  async function fileAction(action,file) {
+    if(action==='preview') return showPreview(file);
+    if(!ready || actionBusy) return;
+    actionBusy=true;
+    setStatus(action==='reveal'?'正在 Finder 中定位…':'正在打开文件…',{sticky:true});
+    try {
+      const response=await callTool('reference_file_action',{action,path:file.path},10000);
+      if(response?.fileAction?.status!=='requested') throw Error('系统没有接受文件操作');
+      setStatus(action==='reveal'?'已在 Finder 中显示':'已用默认应用打开');
+      event('file-action',{action});
+    } catch(error) {
+      if(error?.code==='missing') markMissing(file);
+      setStatus(errorText(error),{error:true}); event('file-action-error',{action,message:errorText(error)}); void saveDiagnostics();
+    } finally { actionBusy=false; }
+  }
+  function markMissing(file) {
+    const entry=state.references.find(f=>f.path===file.path);
+    if(entry) { entry.exists=false; entry.isFile=false; renderFiles(); }
+  }
+
+  // ----- Preview -----
+  async function releasePreview(leaseId) {
+    if(leaseId && ready) {
+      try { await callTool('release_reference_preview',{leaseId}); }
+      catch { /* The server also expires abandoned previews. */ }
+    }
+  }
+  function revokeStale() { staleBlobs.forEach(url=>URL.revokeObjectURL(url)); staleBlobs=[]; }
+  function clearPreviewMedia({keepContent=false}={}) {
+    clearTimeout(previewTimer);
+    if(keepContent) { if(activeBlob) staleBlobs.push(activeBlob); }
+    else {
+      for(const media of $('preview-content').querySelectorAll('video,audio')) {
+        media.pause(); media.removeAttribute('src'); media.load();
+      }
+      $('preview-content').replaceChildren();
+      if(activeBlob) URL.revokeObjectURL(activeBlob);
+      revokeStale();
+    }
+    activeBlob=null;
+    const oldLease=activeLease; activeLease=null; void releasePreview(oldLease);
+    $('retry-preview').hidden=true; $('preview-message').hidden=true;
+    $('preview-message-actions').replaceChildren();
+  }
+  function setProgress(visible, fraction=0) {
+    $('preview-progress').hidden=!visible;
+    $('preview-stage').setAttribute('aria-busy',String(visible));
+    $('progress-bar').style.width=Math.round(fraction*100)+'%';
+    $('progress-label').textContent=fraction>0 ? '正在加载… '+Math.round(fraction*100)+'%' : '正在加载…';
+  }
+  function setStageKind(kind) { $('preview-stage').dataset.kind=kind; $('preview-stage').style.removeProperty('--ratio'); }
+  function showMessage({text, iconName='file', error=false, actions=[]}) {
+    setProgress(false);
+    $('preview-message').hidden=false; $('preview-message').classList.toggle('error',error);
+    $('preview-message-icon').setAttribute('href','#icon-'+iconName);
+    $('preview-message-text').textContent=text;
+    $('preview-message-actions').replaceChildren(...actions.map(([label,run,className])=>{
+      const b=node('button','pill'+(className?' '+className:''),label); b.type='button'; b.addEventListener('click',run); return b;
+    }));
+  }
+  function externalActions(file) {
+    return [['用默认应用打开',()=>fileAction('open',file)],['Show in Finder',()=>fileAction('reveal',file)]];
+  }
+  function missingActions(file) {
+    return [['重新定位…',()=>choose({relink:file})],['移除参考',()=>removeReferences([file.path]),'danger']];
+  }
+  function setExpanded(on) {
+    document.body.classList.toggle('expanded',on);
+    $('expand-preview').setAttribute('aria-pressed',String(on));
+    $('expand-preview').setAttribute('aria-label',on?'恢复列表':'放大预览'); $('expand-preview').title=on?'恢复列表':'放大预览';
+    $('expand-icon').setAttribute('href',on?'#icon-collapse':'#icon-expand');
+  }
+  function closePreview() {
+    previewSerial++; activePreview=null; clearPreviewMedia(); setProgress(false); setExpanded(false);
+    $('preview-board').hidden=true; $('page-controls').hidden=true;
+    $('preview-title').textContent='预览'; $('preview-status').textContent='';
+    renderFiles();
+  }
+  function previewHeader(file) {
+    const kind=fileKind(file);
+    $('preview-board').hidden=false;
+    $('preview-title').textContent=nameOf(file); $('preview-title').title=file.path;
+    paintThumb($('preview-icon'),file,kind);
+    return kind;
+  }
+  async function loadPreviewBlob(preview,serial) {
+    const size=preview.byteSize, chunkSize=preview.chunkSize;
+    if(preview.transport!=='mcp-chunks' || !Number.isSafeInteger(size) || size<0 ||
+       !Number.isSafeInteger(chunkSize) || chunkSize<1 || chunkSize>512*1024 || typeof preview.mime!=='string') {
+      throw Error('当前后台需要更新，请重新打开 Codex 加载新版');
+    }
+    const parts=[]; let next=0, received=0, stopped=false;
+    const worker=async()=>{
+      while(next*chunkSize<size && serial===previewSerial && !stopped) {
+        const index=next++, offset=index*chunkSize;
+        const response=await callTool('read_reference_preview_chunk',{leaseId:preview.leaseId,offset},20000);
+        if(serial!==previewSerial || stopped) return;
+        const chunk=response?.referenceChunk, length=Math.min(chunkSize,size-offset);
+        if(!chunk || chunk.offset!==offset || chunk.totalBytes!==size || chunk.byteLength!==length || typeof chunk.data!=='string' || chunk.data.length>700000) throw Error('预览数据不完整，请重试');
+        const decoded=atob(chunk.data);
+        if(decoded.length!==length) throw Error('预览数据不完整，请重试');
+        const bytes=new Uint8Array(length);
+        for(let i=0;i<length;i++) bytes[i]=decoded.charCodeAt(i);
+        // Hand each chunk to browser-managed Blob storage immediately. Keep
+        // Blob handles, not a whole-file array of live JS byte buffers.
+        parts[index]=new Blob([bytes]); received+=length;
+        setProgress(true,received/size);
+      }
+    };
+    try {
+      await Promise.all([worker(),worker(),worker()]);
+      if(serial!==previewSerial) return null;
+      return URL.createObjectURL(new Blob(parts,{type:preview.mime}));
+    } finally { stopped=true; parts.length=0; }
+  }
+  async function showPreview(file,page=1,{keep=false}={}) {
+    if(!ready) return;
+    const serial=++previewSerial;
+    // Page turns keep the current page visible until the next one is ready.
+    clearPreviewMedia({keepContent:keep});
+    const kind=previewHeader(file);
+    activePreview={file,page,pageCount:activePreview?.file.path===file.path?activePreview.pageCount:undefined,kind,status:'loading'};
+    if(!keep) { setStageKind(kind==='document'?'text':kind); $('page-controls').hidden=true; }
+    $('preview-status').textContent=keep ? '正在翻页…' : '正在读取…';
+    if(keep) $('preview-content').style.opacity='.55'; else setProgress(true);
+    renderFiles();
+    if(!keep) $('preview-board').scrollIntoView?.({block:'nearest'});
+    const failed=(message,code)=>{
+      if(serial!==previewSerial) return;
+      clearPreviewMedia(); activePreview.status='error'; $('preview-content').style.opacity='';
+      if(code==='missing') { markMissing(file); setStageKind('message'); showMessage({text:'原文件已移动或删除',iconName:'warning',error:true,actions:missingActions(file)}); }
+      else {
+        if(kind!=='video') setStageKind('message');
+        showMessage({text:message,iconName:'warning',error:true,actions:code==='permission'?externalActions(file):[]});
+        $('retry-preview').hidden=false;
+      }
+      $('preview-status').textContent='预览未能加载';
+      event('preview-error',{kind,code:code || null,message}); void saveDiagnostics();
+    };
+    if(isMissing(file)) { setStageKind('message'); failed('原文件已移动或删除','missing'); return; }
+    try {
+      // A just-added file must reach the server list before it can be previewed.
+      if(!await flushList()) throw Error('参考列表尚未保存，请重试');
+      if(serial!==previewSerial) return;
+      const response=await callTool('prepare_reference_preview',{path:file.path,page},25000);
+      const preview=response?.referencePreview;
+      if(serial!==previewSerial) { void releasePreview(preview?.leaseId); return; }
+      if(!preview?.kind) throw Error('当前后台不支持面板预览，请重新打开 Codex 加载新版');
+      if(file.exists!==true) { const entry=state.references.find(f=>f.path===file.path); if(entry) { entry.exists=true; renderFiles(); } }
+      activeLease=preview.leaseId || null;
+      const label=(KIND_LABEL[preview.kind] || '文件')+(preview.document?'文字':'')+(file.size!=null?' · '+fileSize(preview.size ?? file.size):'');
+      const loaded=()=>{
+        if(serial!==previewSerial) return;
+        clearTimeout(previewTimer); setProgress(false); revokeStale();
+        activePreview.status='ready';
+        $('preview-status').textContent=label;
+        event('preview-ready',{kind:preview.kind});
+      };
+      if(preview.kind==='text') {
+        setStageKind('text'); $('preview-content').replaceChildren(node('pre','',preview.text)); setProgress(false);
+        activePreview.status='ready';
+        const encoding=preview.encoding && preview.encoding!=='utf-8' ? ' · '+preview.encoding.toUpperCase() : '';
+        $('preview-status').textContent=(preview.document?'文档文字':'文本')+encoding+(preview.truncated?' · 仅显示前 256 KB':'');
+      } else if(preview.kind==='unsupported') {
+        activePreview.status='ready'; setStageKind('message');
+        showMessage({text:preview.message,iconName:preview.reason==='package'?'package':iconFor(kind),actions:externalActions(file)});
+        $('preview-status').textContent=preview.reason==='icloud'?'尚未下载':'暂不支持此格式';
+      } else {
+        const blobUrl=await loadPreviewBlob(preview,serial);
+        if(serial!==previewSerial) { if(blobUrl) URL.revokeObjectURL(blobUrl); return; }
+        activeBlob=blobUrl;
+        void releasePreview(activeLease); activeLease=null;
+        const isMedia=preview.kind==='video' || preview.kind==='audio';
+        const media=node(isMedia?preview.kind:'img','');
+        media.setAttribute('aria-label',nameOf(file)); media.draggable=false;
+        if(isMedia) {
+          media.controls=true; media.preload='auto'; media.playsInline=true;
+          media.addEventListener('loadedmetadata',()=>{
+            if(preview.kind==='video' && media.videoWidth && media.videoHeight) $('preview-stage').style.setProperty('--ratio',media.videoWidth+' / '+media.videoHeight);
+          });
+          media.addEventListener('loadeddata',loaded);
+          media.addEventListener('error',()=>{
+            const code=media.error?.code;
+            event('media-error',{kind:preview.kind,code:code || null,message:media.error?.message || ''});
+            failed(code===3 || code===4?'当前媒体编码无法解码，可用默认应用打开，或换用 H.264 MP4。':'媒体加载失败，请重试。');
+            if(code===3 || code===4) $('preview-message-actions').replaceChildren(...externalActions(file).map(([l,run])=>{ const b=node('button','pill',l); b.type='button'; b.addEventListener('click',run); return b; }));
+          });
+        } else {
+          media.alt=nameOf(file);
+          media.addEventListener('load',()=>{ $('preview-content').style.opacity=''; loaded(); });
+          media.addEventListener('error',()=>failed('无法加载预览，请重试。'));
+        }
+        setStageKind(preview.kind);
+        previewTimer=setTimeout(()=>failed('加载时间较长，请重试。'),30000);
+        media.src=blobUrl; $('preview-content').replaceChildren(media);
+        if(preview.kind==='pdf') {
+          activePreview.page=preview.page; activePreview.pageCount=preview.pageCount;
+          $('page-controls').hidden=!(preview.pageCount>1); $('page-number').textContent=preview.page+' / '+preview.pageCount;
+          $('previous-page').disabled=preview.page<=1; $('next-page').disabled=preview.page>=preview.pageCount;
+        }
+      }
+    } catch(error) { failed(errorText(error),error?.code); }
+  }
+  const turnPage = delta => {
+    if(activePreview?.kind!=='pdf' || !activePreview.pageCount) return;
+    const page=activePreview.page+delta;
+    if(page>=1 && page<=activePreview.pageCount) showPreview(activePreview.file,page,{keep:true});
+  };
+  $('close-preview').addEventListener('click',closePreview);
+  $('expand-preview').addEventListener('click',()=>setExpanded(!document.body.classList.contains('expanded')));
+  $('preview-reveal').addEventListener('click',()=>activePreview && fileAction('reveal',activePreview.file));
+  $('preview-open').addEventListener('click',()=>activePreview && fileAction('open',activePreview.file));
+  $('retry-preview').addEventListener('click',()=>activePreview && showPreview(activePreview.file,activePreview.page));
+  $('previous-page').addEventListener('click',()=>turnPage(-1));
+  $('next-page').addEventListener('click',()=>turnPage(1));
+  $('preview-board').addEventListener('keydown',e=>{
+    if(e.target?.closest?.('button') && (e.key===' ' || e.key==='Enter')) return;
+    if(e.key==='ArrowLeft' || e.key==='PageUp') { e.preventDefault(); turnPage(-1); }
+    else if(e.key==='ArrowRight' || e.key==='PageDown') { e.preventDefault(); turnPage(1); }
+  });
+  window.addEventListener('pagehide',()=>{ closePreview(); [...thumbs.keys()].forEach(releaseThumb); });
+
+  // ----- Adding files -----
+  function addFiles(files, {source, relink=null}) {
+    const known=new Set(state.references.map(f=>f.path));
+    const stamp=new Date().toISOString();
+    const entries=files.map(f=>({...f,addedAt:f.addedAt || stamp}));
+    if(relink) {
+      const file=entries[0];
+      commit({type:'replace',oldPath:relink.path,file});
+      setStatus('已重新定位到 '+nameOf(file)); flash([file.path]);
+      if(activePreview?.file.path===relink.path || !activePreview) showPreview(state.references.find(f=>f.path===file.path) || file);
+      return;
+    }
+    const fresh=entries.filter(f=>!known.has(f.path));
+    if(fresh.length) commit({type:'add',files:fresh});
+    const repeated=entries.length-fresh.length;
+    setStatus(fresh.length ? '已添加 '+fresh.length+' 个参考'+(repeated?'，'+repeated+' 个已在列表中':'') : (repeated===1?'这个文件已在列表中':'这些文件已在列表中'));
+    flash(fresh.length ? fresh.map(f=>f.path) : entries.map(f=>f.path));
+    event(source,{fileCount:entries.length,added:fresh.length});
+  }
+  function flash(paths) {
+    paths.forEach(path=>{ const row=rows.get(path); if(row) { row.li.classList.remove('fresh'); void row.li.offsetWidth; row.li.classList.add('fresh'); } });
+    rows.get(paths[0])?.li.scrollIntoView?.({block:'nearest'});
+  }
+  function setBusy(busy) {
+    $('choose').disabled=busy || !ready; $('empty-add').disabled=busy || !ready; $('refresh').disabled=busy || !ready; $('save').disabled=busy || !ready;
+  }
+  async function choose({relink=null}={}) {
+    if (!ready || picking || resolving) return;
+    picking=true; setBusy(true); $('cancel-choose').hidden=false; $('choose-label').textContent='选择中';
+    setStatus(relink?'选择「'+nameOf(relink)+'」的新位置…':'在系统窗口中选择文件…',{sticky:true});
+    try {
+      const response=await callTool('choose_reference_files',{},150000);
+      const selection=response?.selection;
+      if (!selection) throw Error('没有收到选择结果，请重新打开面板后再试');
+      if (selection.status==='selected') {
+        state.selections.push({time:new Date().toISOString(),...selection}); state.selections=state.selections.slice(-10);
+        const usable=selection.files.filter(f=>f.exists!==false);
+        if(!usable.length) throw Error('所选文件无法访问');
+        addFiles(relink?usable.slice(0,1):usable,{source:'native-picker-selected',relink});
+      } else if (selection.status==='cancelled') {
+        setStatus('已取消，本次未添加文件'); event('native-picker-cancelled',{});
+      } else {
+        throw Error(selection.message || '本机文件选择失败');
+      }
+      if (response.pickerRecordSaved) $('saved').textContent='已保存文件选择记录 · '+response.eventId;
+      renderDiagnostics();
+    } catch(error) {
+      setStatus('选择失败：'+errorText(error),{error:true}); event('native-picker-error',errorText(error)); void saveDiagnostics();
+    } finally {
+      picking=false; $('cancel-choose').hidden=true; $('cancel-choose').disabled=false; $('choose-label').textContent='添加'; setBusy(false);
+    }
+  }
+  function absolutePath(raw) { return typeof raw === 'string' && (/^\//.test(raw) || /^[A-Za-z]:[\\/]/.test(raw)); }
+  function candidates(files, strings) {
+    const values=[];
+    files.forEach((f,index)=>{ if(absolutePath(f.path)) values.push({source:'File.path',fileIndex:index,path:f.path,requiresFinderComparison:true}); });
+    strings.forEach(({type,value})=>{
+      value.split(/[\r\n]+/).filter(line=>line && !line.startsWith('#')).forEach(line=>{
+        if(line.startsWith('file:')) {
+          try { const u=new URL(line); if(u.protocol==='file:' && (!u.hostname || u.hostname==='localhost')) values.push({source:type,path:decodeURIComponent(u.pathname),fileUrl:line,requiresFinderComparison:true}); } catch {}
+        }
+      });
+    });
+    return values;
+  }
+  function fileInfo(f,item) {
+    let entry=null; try { const e=item?.webkitGetAsEntry?.(); if(e) entry={name:e.name,fullPath:e.fullPath,isFile:e.isFile,isDirectory:e.isDirectory}; } catch(error) { entry={error:errorText(error)}; }
+    return {name:f.name,size:f.size,type:f.type,lastModified:f.lastModified,path:typeof f.path==='string'?f.path:null,webkitRelativePath:f.webkitRelativePath || '',entry};
+  }
+  let dragDepth=0, dragCapture=null, dragWatch=null, internalDrag=false;
+  function fileDrag(dt) {
+    // Drags that start inside the panel (the preview image) are not adds.
+    return !internalDrag && dt && (Array.from(dt.types || []).some(t=>t==='Files' || t==='text/uri-list' || t==='public.file-url') || Array.from(dt.items || []).some(i=>i.kind==='file'));
+  }
+  function resetDrag() { clearTimeout(dragWatch); dragDepth=0; dragCapture=null; document.body.classList.remove('dragging'); }
+  function watchDrag() { clearTimeout(dragWatch); dragWatch=setTimeout(resetDrag,500); }
+  function prepareDrag() {
+    if (!dragCapture && ready && !picking && !resolving) {
+      // Capture during the drag, while the macOS drag pasteboard is available.
+      dragCapture=callTool('capture_reference_drag',{},6000).catch(()=>null);
+    }
+  }
+  document.addEventListener('dragstart',()=>{ internalDrag=true; });
+  document.addEventListener('dragend',()=>{ internalDrag=false; resetDrag(); });
+  document.addEventListener('dragenter',e=>{
+    if (!fileDrag(e.dataTransfer)) return;
+    e.preventDefault(); dragDepth++; prepareDrag(); watchDrag();
+    const count=Array.from(e.dataTransfer.items || []).filter(i=>i.kind==='file').length;
+    $('drop-title').textContent=count>1 ? '松开添加 '+count+' 个文件' : '松开添加参考';
+    document.body.classList.add('dragging');
+  });
+  document.addEventListener('dragover',e=>{
+    if (!fileDrag(e.dataTransfer)) return;
+    e.preventDefault(); e.dataTransfer.dropEffect=(picking || resolving)?'none':'copy';
+    prepareDrag(); watchDrag(); document.body.classList.add('dragging');
+  });
+  document.addEventListener('dragleave',e=>{
+    dragDepth=Math.max(0,dragDepth-1);
+    if(!dragDepth || !e.relatedTarget) resetDrag();
+  });
+  document.addEventListener('drop',async e=>{
+    const dt=e.dataTransfer; if(!dt) return;
+    if (!fileDrag(dt)) { internalDrag=false; return; }
+    e.preventDefault(); e.stopPropagation();
+    const captured=dragCapture; resetDrag();
+    // Capture synchronously while the browser's drag data store is readable.
+    const fileItems=Array.from(dt.items || []).filter(i=>i.kind==='file');
+    const files=Array.from(dt.files || []).map((f,i)=>fileInfo(f,fileItems[i]));
+    const strings=Array.from(dt.types || []).filter(t=>/^text\//i.test(t) || t==='public.file-url').map(type=>{let value='';try{value=dt.getData(type).slice(0,16000);}catch{}return{type,value};});
+    const row={time:new Date().toISOString(),types:Array.from(dt.types || []),files,strings,pathCandidates:candidates(files,strings),electronBridgeVisible:typeof window.electronBridge?.getPathForFile==='function'};
+    state.drops.push(row); state.drops=state.drops.slice(-10);
+    $('drop-status').textContent='已收到 '+files.length+' 个文件';
+    event('drop',{fileCount:files.length,candidateCount:row.pathCandidates.length});
+    if(!ready || picking || resolving) {
+      setStatus(!ready?(window.parent===window?'源文件预览不能添加参考':'面板正在连接，请稍后重新拖入'):'请等当前添加完成后再拖入',{error:true});
+      renderDiagnostics(); return;
+    }
+    resolving=true; setBusy(true); setStatus('正在添加拖入的文件…',{sticky:true});
+    try {
+      const capture=await captured;
+      const paths=Array.from(new Set(row.pathCandidates.map(c=>c.path)));
+      const response=await callTool('resolve_reference_drop',{
+        files:files.map(f=>({name:f.name,size:f.size})),paths,captureId:capture?.dragCapture?.id || null
+      },12000);
+      const selection=response?.selection;
+      if(selection?.status!=='selected' || !selection.files?.length) throw Error(selection?.message || '未能取得文件路径，请点「添加」选择文件');
+      state.selections.push({time:new Date().toISOString(),...selection}); state.selections=state.selections.slice(-10);
+      addFiles(selection.files,{source:'drop-added'});
+      $('drop-status').textContent='已添加 '+selection.files.length+' 个文件，原路径已核对';
+    } catch(error) {
+      setStatus(errorText(error),{error:true});
+      $('drop-status').textContent='未添加：'+errorText(error);
+      event('drop-error',errorText(error)); void saveDiagnostics();
+    } finally {
+      resolving=false; setBusy(false); renderDiagnostics();
+    }
+  });
+  $('choose').addEventListener('click',()=>choose()); $('refresh').addEventListener('click',refresh); $('save').addEventListener('click',saveDiagnostics);
+  $('empty-retry').addEventListener('click',refresh);
+  $('empty-add').addEventListener('click',()=>choose());
+  $('cancel-choose').addEventListener('click',async()=>{
+    $('cancel-choose').disabled=true;
+    try { await callTool('cancel_reference_selection',{},5000); }
+    catch(error) { setStatus(errorText(error),{error:true}); }
+  });
+  $('copy').addEventListener('click',async()=>{
+    const text=stringify(snapshot());
+    const copied=await copyText(text);
+    $('saved').textContent=copied?'诊断信息已复制':'请在下方手动选择复制';
+    $('copy-fallback').hidden=copied; if(!copied) $('copy-fallback').textContent=text;
+  });
+  // Re-read on return so moved files and other panels' edits show up.
+  let focusTimer=null;
+  window.addEventListener('focus',()=>{ clearTimeout(focusTimer); focusTimer=setTimeout(()=>{ if(ready && !picking && !resolving) refresh(); },250); });
+  render();
+  (async()=>{
+    if(window.parent===window || window.location?.protocol==='file:') {
+      $('standalone-note').hidden=false;
+      $('bridge').textContent='源文件预览，未连接插件后台';
+      return;
+    }
+    try {
+      const init=await request('ui/initialize',{appInfo:{name:'reference-native-test',version:VERSION},appCapabilities:{},protocolVersion:'2026-01-26'});
+      state.host=init || {}; notify('ui/notifications/initialized',{}); ready=true; setBusy(false);
+      event('initialized',{hostInfo:init?.hostInfo}); render(); await refresh();
+    } catch(error) {
+      $('bridge').textContent='尚未连接宿主：'+errorText(error);
+      restoreError='暂时无法连接，请重新打开参考面板'; renderFiles();
+      event('initialize-error',errorText(error));
+    }
+  })();
+})();
+</script>
+</html>

@@ -1,0 +1,12 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "reference-panel",
+  "version": "0.6.1",
+  "description": "Local file previews and reference management for MCP Apps-enabled harnesses on macOS.",
+  "extensions": {
+    "com.openai": {
+      "displayName": "Reference Panel",
+      "requires_local_executor": true
+    }
+  }
+}
