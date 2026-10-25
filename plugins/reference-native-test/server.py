@@ -18,12 +18,13 @@ import threading
 import time
 import uuid
 
-VERSION = "0.6.2"
-URI = "ui://reference-test/panel-0.6.2.html"
+VERSION = "0.7.0"
+URI = "ui://reference-test/panel-0.7.0.html"
 MIME = "text/html;profile=mcp-app"
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 from preview import PreviewService, THUMB_BATCH, Thumbnails, ToolError
+from project_scope import ProjectScopes
 
 PREVIEWS = PreviewService(ROOT)
 atexit.register(PREVIEWS.close)
@@ -45,6 +46,7 @@ MAX_REFERENCES = 2000
 MAX_BATCH = 150
 # Hosts that send no conversation id (only Codex does today) share one list.
 SHARED_OWNER = "shared:no-conversation-id"
+PROJECTS = ProjectScopes()
 DRAG_CAPTURES = {}
 DRAG_TTL_SECONDS = 45
 LOG_LOCK = threading.Lock()
@@ -339,7 +341,7 @@ def with_status(references):
 
 
 class ReferenceStore:
-    """One small JSON file per conversation, written atomically with a revision."""
+    """One revisioned JSON list per project, with conversation fallback."""
 
     def __init__(self):
         self.lock = threading.Lock()
@@ -348,18 +350,82 @@ class ReferenceStore:
     def path(owner):
         return LIST_DIR / (hashlib.sha256(owner.encode()).hexdigest() + ".json")
 
-    def load(self, owner):
-        if not owner:
-            return 0, []
+    def document(self, owner):
         try:
             data = json.loads(self.path(owner).read_text(encoding="utf-8"))
         except FileNotFoundError:
-            return 0, legacy_references(owner)
+            return {"revision": 0, "references": legacy_references(owner)}
         except (OSError, ValueError):
             raise ToolError("参考列表记录无法读取", "store") from None
         if not isinstance(data, dict) or not isinstance(data.get("revision"), int) or not isinstance(data.get("references"), list):
             raise ToolError("参考列表记录格式无效", "store")
+        migrated = data.get("migratedThreads", [])
+        if not isinstance(migrated, list) or not all(isinstance(item, str) for item in migrated):
+            raise ToolError("参考列表迁移记录无效", "store")
+        return data
+
+    def load(self, owner):
+        if not owner:
+            return 0, []
+        data = self.document(owner)
         return data["revision"], clean_references(data["references"])
+
+    def write(self, owner, references, document):
+        payload = {"schema": 2, "revision": document["revision"] + 1,
+                   "updatedAt": datetime.datetime.now(datetime.timezone.utc).isoformat(), "references": references,
+                   "migratedThreads": document.get("migratedThreads", [])}
+        target = self.path(owner)
+        temporary = target.with_name(target.name + f".{os.getpid()}.tmp")
+        with os.fdopen(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w", encoding="utf-8") as output:
+            json.dump(payload, output, ensure_ascii=False)
+        os.replace(temporary, target)
+        return payload["revision"]
+
+    def migrate(self, owner, thread):
+        """Merge an old chat list once, retaining the original and a durable marker."""
+        if not thread or thread == owner:
+            return self.load(owner)
+        marker = self.path(thread).stem
+        claim = LIST_DIR / ("migration-" + marker + ".json")
+        scope_id = self.path(owner).stem
+        current = self.document(owner)
+        def claimed_elsewhere():
+            try:
+                destination = json.loads(claim.read_text(encoding="utf-8")).get("scopeId")
+            except FileNotFoundError:
+                return False
+            except (OSError, ValueError, AttributeError):
+                raise ToolError("参考列表迁移归属无法读取", "store") from None
+            if not isinstance(destination, str) or len(destination) != 64:
+                raise ToolError("参考列表迁移归属无效", "store")
+            return destination != scope_id
+        if claimed_elsewhere():
+            return current["revision"], clean_references(current["references"])
+        if marker in current.get("migratedThreads", []):
+            return current["revision"], clean_references(current["references"])
+        _, old = self.load(thread)
+        if not old and not self.path(thread).exists():
+            return current["revision"], clean_references(current["references"])
+        LIST_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
+        with self.lock, open(LIST_DIR / ".lock", "a") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            current = self.document(owner)
+            if claimed_elsewhere():
+                return current["revision"], clean_references(current["references"])
+            if marker not in current.get("migratedThreads", []):
+                references = clean_references(current["references"] + old)
+                if len(references) > MAX_REFERENCES:
+                    raise ToolError(f"合并后超过 {MAX_REFERENCES} 个参考，原列表已保留", "too-many")
+                # Claim first: after a crash this project can retry, while a
+                # moved chat cannot import its old shelf into another project.
+                temporary = claim.with_name(claim.name + f".{os.getpid()}.tmp")
+                with os.fdopen(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w", encoding="utf-8") as output:
+                    json.dump({"scopeId": scope_id}, output)
+                os.replace(temporary, claim)
+                current["migratedThreads"] = current.get("migratedThreads", []) + [marker]
+                revision = self.write(owner, references, current)
+                return revision, references
+            return current["revision"], clean_references(current["references"])
 
     def save(self, owner, references, base_revision):
         if not owner:
@@ -370,25 +436,20 @@ class ReferenceStore:
         LIST_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
         with self.lock, open(LIST_DIR / ".lock", "a") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
-            revision, current = self.load(owner)
+            document = self.document(owner)
+            revision, current = document["revision"], clean_references(document["references"])
             # A write based on an unread or outdated list must not replace it.
             if base_revision != revision:
                 return {"status": "conflict", "revision": revision, "references": current}
-            payload = {"schema": 1, "revision": revision + 1,
-                       "updatedAt": datetime.datetime.now(datetime.timezone.utc).isoformat(), "references": references}
-            target = self.path(owner)
-            temporary = target.with_name(target.name + f".{os.getpid()}.tmp")
-            with os.fdopen(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w", encoding="utf-8") as output:
-                json.dump(payload, output, ensure_ascii=False)
-            os.replace(temporary, target)
-            return {"status": "saved", "revision": revision + 1, "references": references}
+            revision = self.write(owner, references, document)
+            return {"status": "saved", "revision": revision, "references": references}
 
 
 STORE = ReferenceStore()
 
 
 def saved_references(meta):
-    """This conversation's current list, including deliberate empty removals."""
+    """The current shelf, including deliberate empty removals."""
     return STORE.load(list_owner(meta))[1]
 
 
@@ -468,7 +529,14 @@ def drag_owner(meta):
 
 
 def list_owner(meta):
-    return drag_owner(meta) or SHARED_OWNER
+    scope = PROJECTS.resolve(meta)
+    if scope["listScope"] == "project":
+        STORE.migrate(scope["owner"], scope["thread"])
+    return scope["owner"]
+
+
+def request_owner(meta):
+    return drag_owner(meta) or list_owner(meta)
 
 
 def capture_drag(meta):
@@ -486,7 +554,7 @@ def capture_drag(meta):
     with DRAG_LOCK:
         if len(DRAG_CAPTURES) >= 20:
             del DRAG_CAPTURES[next(iter(DRAG_CAPTURES))]
-        DRAG_CAPTURES[identifier] = {"time": time.monotonic(), "owner": list_owner(meta), "capture": capture}
+        DRAG_CAPTURES[identifier] = {"time": time.monotonic(), "owner": request_owner(meta), "capture": capture}
     return {"id": identifier, "available": True}
 
 
@@ -517,7 +585,7 @@ def resolve_drop(args, meta):
         identifier = args.get("captureId")
         with DRAG_LOCK:
             cached = DRAG_CAPTURES.pop(identifier, None) if isinstance(identifier, str) else None
-        if cached is not None and cached["owner"] != list_owner(meta):
+        if cached is not None and cached["owner"] != request_owner(meta):
             return {"status": "unavailable", "files": [], "message": "拖放来自其他对话，请重新拖入文件"}
         if cached is not None and time.monotonic() - cached["time"] <= DRAG_TTL_SECONDS:
             capture = cached["capture"]
@@ -605,7 +673,7 @@ TOOLS = [
         "openai/widgetAccessible": True,
         "openai/ui": {"entrypoints": [{"type": "thread"}]},
     }),
-    tool("read_probe_context", "Read host tool context", "Return metadata actually received by this tool and this conversation's reference list. No project argument is injected."),
+    tool("read_probe_context", "Read host tool context", "Return host metadata and the project-shared reference list. Falls back to the conversation when no project is resolved."),
     tool("choose_reference_files", "选择文件（可多选）", "Show the local macOS file picker and return selected absolute paths. Does not read or upload file contents.",
          readonly=False, meta={"ui": {"visibility": ["app"]}, "openai/widgetAccessible": True}),
     tool("cancel_reference_selection", "取消文件选择", "Cancel this panel's open file picker without blocking other tools.",
@@ -636,9 +704,9 @@ TOOLS = [
     tool("read_reference_thumbnails", "读取参考缩略图", "Return small cached Quick Look thumbnails and durations for files already in this conversation's list. Widget-only bytes; never uploads or modifies files.",
          {"type": "object", "properties": {"paths": {"type": "array", "maxItems": THUMB_BATCH, "items": {"type": "string"}}},
           "required": ["paths"], "additionalProperties": False}, readonly=True, meta=app_only()),
-    tool("save_reference_list", "保存参考列表", "Save this conversation's reference list from the panel. Rejects a write based on an outdated revision. Does not touch the files.",
+    tool("save_reference_list", "保存参考列表", "Save the current project's reference list from the panel. Rejects outdated revisions and changed project scopes. Does not touch the files.",
          {"type": "object", "properties": {"references": {"type": "array", "maxItems": MAX_REFERENCES, "items": {"type": "object"}},
-          "baseRevision": {"type": ["integer", "null"]}}, "required": ["references", "baseRevision"], "additionalProperties": False},
+          "baseRevision": {"type": ["integer", "null"]}, "scopeId": {"type": ["string", "null"]}}, "required": ["references", "baseRevision"], "additionalProperties": False},
          readonly=False, meta=app_only()),
     tool("save_probe_snapshot", "Save local diagnostic snapshot", "Append panel diagnostics to the local diagnostic log. Does not read or upload files.",
          {"type": "object", "properties": {"snapshot": {"type": "object"}}, "required": ["snapshot"], "additionalProperties": False},
@@ -648,44 +716,54 @@ TOOLS = [
 
 def call_tool(name, args, meta):
     data = context(meta)
-    owner = list_owner(meta)
+    scoped = name in {"open_reference_probe", "read_probe_context", "save_reference_list", "prepare_reference_preview",
+                      "read_reference_thumbnails", "read_reference_preview_chunk", "release_reference_preview"}
+    scope = PROJECTS.resolve(meta) if scoped else None
+    owner = scope["owner"] if scope else drag_owner(meta) or SHARED_OWNER
+    if scope and scope["listScope"] == "project" and name not in {"read_reference_preview_chunk", "release_reference_preview"}:
+        STORE.migrate(owner, scope["thread"])
+    capability_owner = drag_owner(meta) or owner
+    if scope and scope["listScope"] == "project":
+        capability_owner = scope["scopeId"] + ":" + capability_owner
     if name in ("open_reference_probe", "read_probe_context"):
         PICKER.warm()
         revision, references = STORE.load(owner)
         return result({"probeContext": data, "references": with_status(references), "listRevision": revision,
-                       "listScope": "conversation" if drag_owner(meta) else "shared"})
+                       "listScope": scope["listScope"], "scopeId": scope["scopeId"], "project": scope["project"]})
     if name == "cancel_reference_selection":
         PICKER.cancel()
         return result({"cancelRequested": True})
     if name == "save_reference_list":
+        if (scope["listScope"] == "project" or args.get("scopeId") is not None) and args.get("scopeId") != scope["scopeId"]:
+            raise ToolError("项目已变更或面板版本过旧，请重新打开参考面板后操作", "scope-changed")
         references, base = args.get("references"), args.get("baseRevision")
         if not isinstance(references, list) or not (base is None or (isinstance(base, int) and not isinstance(base, bool))):
             raise ValueError("参考列表格式无效")
         outcome = STORE.save(owner, references, base)
         if outcome["status"] == "saved":
-            PREVIEWS.retain({f["path"] for f in outcome["references"]}, owner)
+            PREVIEWS.retain({f["path"] for f in outcome["references"]}, capability_owner)
         else:
             outcome["references"] = with_status(outcome["references"])
         return result({"list": outcome})
     if name == "prepare_reference_preview":
         path = args.get("path")
-        if path not in {f["path"] for f in saved_references(meta)}:
+        if path not in {f["path"] for f in STORE.load(owner)[1]}:
             raise ToolError("请先将文件添加到当前参考列表", "not-listed")
-        preview = PREVIEWS.prepare(path, owner, args.get("page", 1))
+        preview = PREVIEWS.prepare(path, capability_owner, args.get("page", 1))
         return {"content": [], "structuredContent": {"previewReady": True}, "_meta": {"referencePreview": preview}}
     if name == "read_reference_thumbnails":
         paths = args.get("paths")
         if not isinstance(paths, list) or len(paths) > THUMB_BATCH or not all(isinstance(p, str) for p in paths):
             raise ValueError("缩略图请求格式无效")
-        listed = {f["path"] for f in saved_references(meta)}
+        listed = {f["path"] for f in STORE.load(owner)[1]}
         items = THUMBNAILS.get([p for p in paths if p in listed])
         items.update({p: {"status": "not-listed"} for p in paths if p not in listed})
         return {"content": [], "structuredContent": {"thumbnailsReady": True}, "_meta": {"referenceThumbnails": items}}
     if name == "release_reference_preview":
-        PREVIEWS.release(args.get("leaseId"), owner)
+        PREVIEWS.release(args.get("leaseId"), capability_owner)
         return result({"released": True})
     if name == "read_reference_preview_chunk":
-        chunk = PREVIEWS.read_chunk(args.get("leaseId"), owner, args.get("offset"))
+        chunk = PREVIEWS.read_chunk(args.get("leaseId"), capability_owner, args.get("offset"))
         return {"content": [], "structuredContent": {"chunkReady": True}, "_meta": {"referenceChunk": chunk}}
     if name == "reference_file_action":
         record = {"toolContext": data, "action": args.get("action"), "path": args.get("path")}

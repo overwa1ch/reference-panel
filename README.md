@@ -4,7 +4,7 @@ A local reference shelf for MCP Apps-enabled AI harnesses on macOS.
 
 把视频、图片和文档放进 AI harness 的参考面板，点击预览，右键在 Finder 中定位。通过标准 MCP stdio 与 MCP Apps 接入宿主；添加的是文件路径，移除参考会保留原文件。
 
-**状态：0.6.2，实验性源码预览版。** 当前后台已在 Codex 中运行，自动检查与本地浏览器验证通过；当前版本的完整原生缩略图和视频播放验收仍未完成。请先用非敏感测试文件试用。独立社区项目。
+**状态：0.7.0，实验性源码预览版。** 当前后台已在 Codex 中运行，自动检查与本地浏览器验证通过；当前版本的完整原生缩略图和视频播放验收仍未完成。请先用非敏感测试文件试用。独立社区项目。
 
 ## 功能
 
@@ -12,7 +12,7 @@ A local reference shelf for MCP Apps-enabled AI harnesses on macOS.
 - 缩略图网格与列表视图，视频显示时长。
 - 面板内预览视频、音频、图片、PDF、HTML 网页和文本；部分办公文档可提取文字。
 - Show in Finder、用默认应用打开、复制路径、重新定位失效文件。
-- 多选移除与撤销；有对话 ID 的宿主按对话保存，否则使用共享列表。
+- 多选移除与撤销；同一项目的对话共享参考，其他项目保持独立。
 - 跟随宿主的浅色／深色主题。
 
 ## 从源码安装
@@ -46,6 +46,22 @@ sh scripts/install-codex.sh
 
 本源码包没有预编译助手，因此应先克隆到本地并编译。直接从远程 Git marketplace 安装会缺少 `bin/`。旧原型的 `reference-native-test@reference-panel-lab` 和公开插件是不同 ID；确认公开版可用后，可手动停用旧原型，避免两个入口。
 
+## 项目共享
+
+同一项目中的对话共用一份参考列表，添加和移除会同步；面板显示当前项目名称。打开的面板每 3 秒检查一次项目列表，返回面板时也会刷新。并发保存通过修订号合并，项目切换会校验列表身份。
+
+Codex 中使用公开的 `thread/read` 接口读取当前对话的目录，不恢复对话、不运行模型、不读取完整聊天记录；需要本机 `codex` CLI，或以 `CODEX_BIN` 指定。目录查询使用短时缓存，界面不使用插件安装目录推断项目。
+
+其他宿主可在工具元数据中提供 `projectRoot`、`project.root`、`workspaceRoot` 或 `cwd`（绝对目录），也支持 `projectId`。也可为项目配置固定目录：
+
+```sh
+python3 scripts/mcp-config.py --project /absolute/path/to/project
+```
+
+生成配置中的 `REFERENCE_PROJECT_ROOT` 固定此服务的共享项目。未识别项目时退回当前对话；没有对话身份时使用全局共享列表，面板会说明范围。
+
+升级前的对话列表在该对话首次打开新版面板时自动合并一次，按路径去重，原记录保留。合并标记会保留，因此已移除的参考不会因重开旧对话而重新出现。旧对话移到其他项目时，不会再次携带其历史列表。
+
 ## 数据与权限
 
 为保留原型用户的数据，默认目录仍是 `~/Library/Application Support/codex-reference-panel/`，也可用 `REFERENCE_STATE_DIR` 指定其他目录：`lists/` 保存路径列表，`thumbnails/` 保存缩略图缓存，`diagnostics/` 保存本机诊断信息。删除列表项目不删除原文件，卸载插件也不会自动清理上述目录。
@@ -54,13 +70,13 @@ sh scripts/install-codex.sh
 
 ## 已知边界
 
-- 当前仅支持 macOS；有对话 ID 时按对话保存，否则共享，尚未实现按项目共享。
+- 当前仅支持 macOS；项目以规范化目录或宿主项目 ID 识别。不同 worktree 目录需要配置相同的 `REFERENCE_PROJECT_ROOT` 才能共用。
 - 视频完整读入后才播放；没有原先的 64 MiB 总大小门槛，但大文件仍需等待并占用浏览器存储。超大文件和长期运行尚未完成压力测试。
 - 播放依赖宿主支持的编码，不能保证所有 MOV、MP4 或其他容器均可播放。
 - HTML 支持完整排版和内嵌图片的静态预览；脚本、外部资源和外部跳转禁用。
 - iCloud 文件需要已经下载到本机。尚未下载的文件会给出提示。
 - Agent 目前只能打开面板和读取列表，不能直接批量增删参考。
-- 没有对话 ID 的 MCP Apps 宿主会共用一份列表；其他宿主尚未实际验证。
+- 未提供项目信息的宿主按对话保存；连对话 ID 也没有时共用一份列表。其他宿主尚未实际验证。
 - 本项目提供源码构建，没有 Developer ID 签名、公证或面向普通用户的一键安装包。
 
 ## 开发与验证
@@ -71,7 +87,7 @@ python3 -m unittest discover -s verification -p 'test_*.py' -v
 node verification/test_probe_ui.cjs
 ```
 
-目前包含 57 项 Python 检查和合成页面检查。测试使用临时数据；通过它们不代表真实 Finder 拖放、选择器或原生宿主播放已验收。
+目前包含 66 项 Python 检查和合成页面检查。测试使用临时数据；通过它们不代表真实 Finder 拖放、选择器或原生宿主播放已验收。
 
 可在本机运行相同页面与后台的浏览器验证环境：
 

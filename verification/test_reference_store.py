@@ -203,6 +203,160 @@ class PortabilityTests(unittest.TestCase):
         self.assertEqual(probe.import_legacy_log(log)["imported"], [], "a second import changes nothing")
 
 
+class ProjectSharingTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.folder = Path(self.temp.name)
+        self.root = self.folder / 'Project A'
+        self.root.mkdir()
+        self.file = self.folder / 'reference.txt'
+        self.file.write_text('shared reference')
+        for name, value in [('LIST_DIR', self.folder / 'state/lists'), ('LOG', self.folder / 'log.jsonl'),
+                            ('PROJECTS', probe.ProjectScopes()), ('PREVIEWS', probe.PreviewService(ROOT))]:
+            patcher = patch.object(probe, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        self.addCleanup(probe.PREVIEWS.close)
+        picker = patch.object(probe.PICKER, 'warm')
+        picker.start()
+        self.addCleanup(picker.stop)
+
+    def call(self, name, args=None, thread='A', root=None):
+        return probe.dispatch('tools/call', {'name': name, 'arguments': args or {},
+                              '_meta': {'threadId': thread, 'projectRoot': str(root or self.root)}})
+
+    def read(self, thread='A', root=None):
+        return self.call('read_probe_context', thread=thread, root=root)['structuredContent']
+
+    def save(self, references, context, thread='A', root=None):
+        return self.call('save_reference_list', {'references': references, 'baseRevision': context['listRevision'],
+                         'scopeId': context['scopeId']}, thread, root)
+
+    def test_same_project_shares_add_and_remove_other_projects_stay_isolated(self):
+        initial = self.read()
+        self.assertEqual(initial['listScope'], 'project')
+        self.assertEqual(initial['project']['root'], str(self.root.resolve()))
+        self.assertEqual(self.save([{'path': str(self.file)}], initial)['structuredContent']['list']['status'], 'saved')
+        second = self.read('B')
+        self.assertEqual(second['scopeId'], initial['scopeId'])
+        self.assertEqual(second['references'][0]['path'], str(self.file))
+        self.assertEqual(self.read('C', self.folder / 'Project B')['references'], [])
+        shown = self.call('prepare_reference_preview', {'path': str(self.file)}, 'B')
+        self.assertEqual(shown['_meta']['referencePreview']['text'], 'shared reference')
+        self.save([], second, 'B')
+        self.assertEqual(self.read()['references'], [])
+        self.assertTrue(self.file.exists())
+
+    def test_stale_project_scope_cannot_save_into_a_new_project(self):
+        before = self.read()
+        failed = self.save([{'path': str(self.file)}], before, root=self.folder / 'Different project')
+        self.assertTrue(failed['isError'])
+        self.assertEqual(failed['structuredContent']['error']['code'], 'scope-changed')
+        self.assertEqual(self.read(root=self.folder / 'Different project')['references'], [])
+
+    def test_old_lists_merge_once_and_do_not_resurrect_removed_references(self):
+        other = self.folder / 'other.txt'
+        other.write_text('other')
+        probe.STORE.save('A', [{'path': str(self.file)}], 0)
+        probe.STORE.save('B', [{'path': str(self.file)}, {'path': str(other)}], 0)
+        first = self.read()
+        second = self.read('B')
+        self.assertEqual(len(second['references']), 2)
+        self.assertGreater(second['listRevision'], first['listRevision'])
+        stale = self.save([], first)['structuredContent']['list']
+        self.assertEqual(stale['status'], 'conflict')
+        self.save([], second, 'B')
+        self.assertEqual(self.read()['references'], [])
+        self.assertEqual(self.read('B')['references'], [])
+        self.assertEqual(len(probe.STORE.load('A')[1]), 1, 'legacy backup is retained')
+        # A fresh backend reads durable migration markers rather than re-importing.
+        with patch.object(probe, 'STORE', probe.ReferenceStore()):
+            self.assertEqual(self.read()['references'], [])
+
+    def test_project_paths_normalize_symlinks_without_using_process_cwd(self):
+        alias = self.folder / 'Alias'
+        alias.symlink_to(self.root, target_is_directory=True)
+        self.assertEqual(self.read()['scopeId'], self.read('B', alias)['scopeId'])
+        resolver = probe.ProjectScopes()
+        self.assertEqual(resolver.resolve({'threadId': 'X', 'workspaces': {str(self.root): {}}})['listScope'], 'conversation')
+        self.assertEqual(resolver.resolve({'threadId': 'X'})['listScope'], 'conversation')
+        self.assertEqual(resolver.resolve({'projectId': 'explicit-project'})['listScope'], 'project')
+        with patch.dict(os.environ, {'REFERENCE_PROJECT_ROOT': str(self.root)}):
+            self.assertEqual(resolver.resolve({})['scopeId'], self.read()['scopeId'])
+
+    def test_moving_a_chat_does_not_import_its_old_list_into_another_project(self):
+        probe.STORE.save('A', [{'path': str(self.file)}], 0)
+        self.assertEqual(len(self.read()['references']), 1)
+        moved = self.read(root=self.folder / 'Project B')
+        self.assertEqual(moved['references'], [])
+        self.assertEqual(len(self.read('B')['references']), 1)
+
+    def test_codex_lookup_is_cached_and_keeps_scope_on_transient_failure(self):
+        module = probe.sys.modules['project_scope']
+        resolver = probe.ProjectScopes()
+        meta = {'threadId': 'T', 'plugin_id': 'reference-native-test@test'}
+        found = {'root': str(self.root), 'source': 'codex-thread'}
+        with patch.object(module, 'codex_thread_project', return_value=found) as lookup:
+            a, b = resolver.resolve(meta), resolver.resolve(meta)
+            self.assertEqual(a['scopeId'], b['scopeId'])
+            self.assertEqual(lookup.call_count, 1)
+        resolver.cache['T'] = (0, found)
+        with patch.object(module, 'codex_thread_project', side_effect=OSError('unavailable')):
+            self.assertEqual(resolver.resolve(meta)['scopeId'], a['scopeId'])
+        with patch.object(module, 'codex_thread_project', return_value=None):
+            self.assertEqual(resolver.resolve({'threadId': 'Missing', 'plugin_id': 'x'})['listScope'], 'conversation')
+
+    def test_media_leases_are_still_private_to_each_conversation(self):
+        video = self.folder / 'clip.mp4'
+        video.write_bytes(b'fixture')
+        self.save([{'path': str(video)}], self.read())
+        prepared = self.call('prepare_reference_preview', {'path': str(video)})['_meta']['referencePreview']
+        forbidden = self.call('read_reference_preview_chunk', {'leaseId': prepared['leaseId'], 'offset': 0}, 'B')
+        self.assertTrue(forbidden['isError'])
+        moved = self.call('read_reference_preview_chunk', {'leaseId': prepared['leaseId'], 'offset': 0}, root=self.folder / 'Project B')
+        self.assertTrue(moved['isError'])
+        allowed = self.call('read_reference_preview_chunk', {'leaseId': prepared['leaseId'], 'offset': 0})
+        self.assertEqual(allowed['_meta']['referenceChunk']['byteLength'], 7)
+
+    def test_two_backends_migrate_without_losing_either_list(self):
+        other = self.folder / 'another.txt'
+        other.write_text('other')
+        probe.STORE.save('A', [{'path': str(self.file)}], 0)
+        probe.STORE.save('B', [{'path': str(other)}], 0)
+        owner = probe.PROJECTS.resolve({'projectRoot': str(self.root)})['owner']
+        barrier = threading.Barrier(2)
+        def migrate(thread):
+            store = probe.ReferenceStore()
+            barrier.wait(timeout=3)
+            return store.migrate(owner, thread)
+        with probe.ThreadPoolExecutor(max_workers=2) as pool:
+            jobs = [pool.submit(migrate, thread) for thread in ('A', 'B')]
+            for job in jobs:
+                job.result(timeout=5)
+        revision, references = probe.STORE.load(owner)
+        self.assertEqual(revision, 2)
+        self.assertEqual({item['path'] for item in references}, {str(self.file), str(other)})
+
+    def test_codex_adapter_requests_only_stored_thread_routing(self):
+        executable = self.folder / 'fake-codex'
+        requests = self.folder / 'requests.jsonl'
+        executable.write_text('#!/usr/bin/env python3\nimport json,sys\n'
+                              'for line in sys.stdin:\n'
+                              ' m=json.loads(line)\n'
+                              ' with open(' + repr(str(requests)) + ',"a") as f:f.write(json.dumps(m)+"\\n")\n'
+                              ' if "id" not in m:continue\n'
+                              ' result={"thread":{"cwd":' + json.dumps(str(self.root)) + '}} if m["method"]=="thread/read" else {}\n'
+                              ' print(json.dumps({"id":m["id"],"result":result}),flush=True)\n')
+        executable.chmod(0o755)
+        with patch.dict(os.environ, {'CODEX_BIN': str(executable)}):
+            found = probe.sys.modules['project_scope'].codex_thread_project('fixture')
+        self.assertEqual(found['root'], str(self.root.resolve()))
+        calls = [json.loads(line) for line in requests.read_text().splitlines()]
+        self.assertEqual([item['method'] for item in calls], ['initialize', 'initialized', 'thread/read'])
+        self.assertEqual(calls[-1]['params'], {'threadId': 'fixture', 'includeTurns': False})
+
+
 class BackendFixTests(unittest.TestCase):
     def test_too_many_files_has_a_chinese_message(self):
         with tempfile.TemporaryDirectory() as temp:

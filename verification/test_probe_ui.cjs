@@ -72,10 +72,10 @@ function makeDocument() {
 }
 
 // ---- Fake host + server with per-thread revisioned lists.
-function boot({failFirstRead=false, list=[], theme={theme:'light'}, thumbnails=false, scope='conversation'}={}) {
+function boot({failFirstRead=false, list=[], theme={theme:'light'}, thumbnails=false, scope='conversation', serverState=null}={}) {
   const doc=makeDocument();
   const windowHandlers={};
-  const server={revision:list.length?3:0, references:structuredClone(list), saves:[], conflicts:0};
+  const server=serverState || {revision:list.length?3:0, references:structuredClone(list), saves:[], conflicts:0,scope,scopeId:'fixture-'+scope,project:null};
   const h={doc,server,captures:[],actions:[],previewRequests:[],releases:[],blobURLs:[],revokedURLs:[],hostReplies:[],deferredChunks:[],deferredPreviews:[],calls:[],thumbRequests:[],
     pickerStatus:'selected',pickerFiles:[{path:'/fixture/中文 视频.mp4',exists:true,isFile:true},{path:'/fixture/文档.txt',exists:true,isFile:true}],
     dragAvailable:false,actionError:null,deferPreview:false,deferChunks:false,previewSize:6,previewChunkSize:4,lastBlob:null,failRead:failFirstRead,holdSave:null};
@@ -99,9 +99,10 @@ function boot({failFirstRead=false, list=[], theme={theme:'light'}, thumbnails=f
       const error=(text,code)=>({isError:true,content:[{type:'text',text}],structuredContent:{error:{code,message:text}}});
       if(name==='read_probe_context') {
         if(h.failRead) { h.failRead=false; result=error('fixture read failed','store'); }
-        else result=ok({references:structuredClone(server.references),listRevision:server.revision,listScope:scope});
+        else result=ok({references:structuredClone(server.references),listRevision:server.revision,listScope:server.scope,scopeId:server.scopeId,project:server.project});
       } else if(name==='save_reference_list') {
-        if(args.baseRevision!==server.revision) { server.conflicts++; result=ok({list:{status:'conflict',revision:server.revision,references:structuredClone(server.references)}}); }
+        if((server.scope==='project' || args.scopeId!=null) && args.scopeId!==server.scopeId) result=error('项目已变更','scope-changed');
+        else if(args.baseRevision!==server.revision) { server.conflicts++; result=ok({list:{status:'conflict',revision:server.revision,references:structuredClone(server.references)}}); }
         else { server.revision++; server.references=structuredClone(args.references); server.saves.push(structuredClone(args.references)); result=ok({list:{status:'saved',revision:server.revision,references:structuredClone(args.references)}}); }
       } else if(name==='save_probe_snapshot') { h.captures.push(structuredClone(args.snapshot)); result=ok({saved:true,eventId:'fixture-event'}); }
       else if(name==='reference_file_action') { h.actions.push(structuredClone(args)); result=h.actionError?error(h.actionError):ok({fileAction:{status:'requested',action:args.action}}); }
@@ -138,7 +139,7 @@ function boot({failFirstRead=false, list=[], theme={theme:'light'}, thumbnails=f
     else if(h.holdSave && name==='save_reference_list') h.holdSave.push({id:message.id,reply});
     else queueMicrotask(reply);
   }};
-  const timers=(fn,ms)=>{ const t=setTimeout(fn,ms); t.unref?.(); return t; };
+  const timers=(fn,ms)=>{ if(ms===3000) h.pollShelf=fn; const t=setTimeout(fn,ms); t.unref?.(); return t; };
   const context={window,document:doc,crypto:{randomUUID},navigator:{clipboard:{async writeText(text){ h.copied=text; }}},URL:TestURL,Blob,Uint8Array,atob,Date,Map,Set,
     setTimeout:timers,clearTimeout,console,Promise,Error,JSON,Math,Number,Object,Array,String,Boolean,structuredClone,queueMicrotask};
   vm.runInNewContext(script, context);
@@ -448,6 +449,22 @@ function boot({failFirstRead=false, list=[], theme={theme:'light'}, thumbnails=f
   assert.equal(h.$('file-count').title,'所有对话共用这份列表');
   h=boot(); await settle();
   assert.match(h.$('empty-text').textContent,/列表跟随当前对话/);
+
+  const shared={revision:0,references:[],saves:[],conflicts:0,scope:'project',scopeId:'project-A',project:{name:'共享项目',root:'/fixture/project-A'}};
+  const panelA=boot({serverState:shared}), panelB=boot({serverState:shared}); await settle();
+  assert.match(panelA.$('scope-label').textContent,/共享项目 · 项目共享/);
+  assert.match(panelB.$('empty-text').textContent,/同一项目的所有对话共用/);
+  await panelA.$('choose').click(); await settle();
+  await panelB.pollShelf(); await settle();
+  assert.equal(panelB.rows().length,2,'another conversation sees additions when its project shelf refreshes');
+  await panelB.rows()[0].children[1].click({clientX:1,clientY:1});
+  await panelB.$('file-menu').querySelectorAll('button').find(b=>b.textContent==='移除参考').click(); await settle();
+  await panelA.pollShelf(); await settle();
+  assert.equal(panelA.rows().length,1,'removals are shared too');
+  shared.scopeId='project-B';shared.project={name:'另一项目',root:'/fixture/project-B'};shared.revision=0;shared.references=[];
+  await panelA.$('refresh').click(); await settle();
+  assert.equal(panelA.rows().length,0,'a project switch accepts its own revision and never keeps old rows');
+  assert.match(panelA.$('scope-label').textContent,/另一项目/);
 
   console.log('PASS synthetic UI: list scope, thumbnails/grid/list, theme tokens, restore/conflict merge, drag/add, picker, PDF paging, menu keyboard, focus survival, video/text, stale responses, large assembly/cancel, remove/undo, multi-select, host requests, missing/relink');
 })().catch(e=>{console.error(e);process.exitCode=1;});
