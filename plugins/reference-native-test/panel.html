@@ -344,7 +344,7 @@
 </main>
 <div class="drop-overlay" aria-hidden="true"><div class="drop-card"><span class="drop-icon"><svg viewBox="0 0 16 16"><use href="#icon-plus"/></svg></span><strong id="drop-title">松开添加参考</strong><span>仅保存路径，不复制原文件</span></div></div>
 <details class="diagnostics">
-  <summary><svg class="chevron" aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-next"/></svg>诊断信息<span class="version">0.7.0</span></summary>
+  <summary><svg class="chevron" aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-next"/></svg>诊断信息<span class="version">0.7.1</span></summary>
   <div class="diagnostic-body">
     <div id="bridge" class="status">正在连接…</div>
     <div class="row"><button id="refresh" class="pill" type="button" disabled>刷新</button><button id="save" class="pill" type="button" disabled>保存记录</button><button id="copy" class="pill" type="button">复制诊断</button></div>
@@ -363,7 +363,7 @@
 (() => {
   'use strict';
   const $ = id => document.getElementById(id);
-  const VERSION = '0.7.0';
+  const VERSION = '0.7.1';
   const state = { schema: 3, version: VERSION, panelInstance: crypto.randomUUID(), openedAt: new Date().toISOString(), host: {}, toolContext: null, drops: [], selections: [], references: [], events: [] };
   const pending = new Map(); let rpcId = 0, ready = false, picking = false, resolving = false, actionBusy = false;
   // List persistence: local edits are ops replayed onto the server's latest list.
@@ -889,9 +889,9 @@
     }
     return acceptTool(result);
   }
-  async function refresh() {
+  async function refresh({incremental=false}={}) {
     try {
-      const response=await callTool('read_probe_context');
+      const response=await callTool('read_probe_context',incremental && listLoaded ? {knownRevision:listRevision,scopeId} : {});
       if(response?.scopeId && scopeId && response.scopeId!==scopeId) {
         if(pendingOps.length || saveLoop) {
           ready=false; setBusy(false); closePreview();
@@ -904,8 +904,9 @@
       scopeId=response?.scopeId || null; project=response?.project || null;
       // An in-flight save will report the newer revision itself.
       if(['shared','conversation','project'].includes(response?.listScope)) listScope=response.listScope;
-      if(!saveLoop) adoptList(response?.references,response?.listRevision);
-      event('context-refreshed',state.toolContext?.requestMeta); $('bridge').textContent='已连接原生 MCP Apps 宿主';
+      if(!saveLoop && !response?.unchanged) adoptList(response?.references,response?.listRevision);
+      if(!response?.unchanged) event('context-refreshed',state.toolContext?.requestMeta);
+      $('bridge').textContent='已连接原生 MCP Apps 宿主';
     } catch(error) {
       $('bridge').textContent=errorText(error); event('context-error',errorText(error));
       if(!listLoaded) restoreError='参考列表读取失败：'+errorText(error);
@@ -1319,7 +1320,7 @@
   function watchShelf() {
     clearTimeout(shelfTimer);
     shelfTimer=setTimeout(async()=>{
-      if(ready && listScope==='project' && document.visibilityState!=='hidden' && !picking && !resolving) await refresh();
+      if(ready && listScope==='project' && document.visibilityState!=='hidden' && !picking && !resolving) await refresh({incremental:true});
       if(ready) watchShelf();
     },3000);
   }

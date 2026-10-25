@@ -255,6 +255,15 @@ class ProjectSharingTests(unittest.TestCase):
         self.assertEqual(failed['structuredContent']['error']['code'], 'scope-changed')
         self.assertEqual(self.read(root=self.folder / 'Different project')['references'], [])
 
+    def test_unchanged_shelf_poll_does_not_stat_every_reference(self):
+        first = self.read()
+        self.save([{'path': str(self.file)}], first)
+        current = self.read()
+        with patch.object(probe, 'with_status', side_effect=AssertionError('must not re-stat unchanged files')):
+            result = self.call('read_probe_context', {'knownRevision': current['listRevision'], 'scopeId': current['scopeId']})['structuredContent']
+        self.assertTrue(result['unchanged'])
+        self.assertNotIn('references', result)
+
     def test_old_lists_merge_once_and_do_not_resurrect_removed_references(self):
         other = self.folder / 'other.txt'
         other.write_text('other')
@@ -291,6 +300,23 @@ class ProjectSharingTests(unittest.TestCase):
         moved = self.read(root=self.folder / 'Project B')
         self.assertEqual(moved['references'], [])
         self.assertEqual(len(self.read('B')['references']), 1)
+
+    def test_later_legacy_chats_do_not_bring_back_removed_paths(self):
+        other = self.folder / 'other.txt'
+        other.write_text('other')
+        probe.STORE.save('A', [{'path': str(self.file)}], 0)
+        probe.STORE.save('B', [{'path': str(self.file)}, {'path': str(other)}], 0)
+        probe.STORE.save('C', [{'path': str(self.file)}], 0)
+        first = self.read()
+        self.save([], first)
+        second = self.read('B')
+        self.assertEqual([item['path'] for item in second['references']], [str(other)])
+        self.assertEqual([item['path'] for item in self.read('C')['references']], [str(other)])
+        # An explicit add/undo remains available after migration filtering.
+        second = self.read('B')
+        outcome = self.save(second['references'] + [{'path': str(self.file)}], second, 'B')
+        self.assertEqual(outcome['structuredContent']['list']['status'], 'saved')
+        self.assertEqual(len(self.read()['references']), 2)
 
     def test_codex_lookup_is_cached_and_keeps_scope_on_transient_failure(self):
         module = probe.sys.modules['project_scope']

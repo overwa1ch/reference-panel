@@ -99,7 +99,7 @@ function boot({failFirstRead=false, list=[], theme={theme:'light'}, thumbnails=f
       const error=(text,code)=>({isError:true,content:[{type:'text',text}],structuredContent:{error:{code,message:text}}});
       if(name==='read_probe_context') {
         if(h.failRead) { h.failRead=false; result=error('fixture read failed','store'); }
-        else result=ok({references:structuredClone(server.references),listRevision:server.revision,listScope:server.scope,scopeId:server.scopeId,project:server.project});
+        else result=ok({...(args.knownRevision===server.revision && args.scopeId===server.scopeId?{unchanged:true}:{references:structuredClone(server.references)}),listRevision:server.revision,listScope:server.scope,scopeId:server.scopeId,project:server.project});
       } else if(name==='save_reference_list') {
         if((server.scope==='project' || args.scopeId!=null) && args.scopeId!==server.scopeId) result=error('项目已变更','scope-changed');
         else if(args.baseRevision!==server.revision) { server.conflicts++; result=ok({list:{status:'conflict',revision:server.revision,references:structuredClone(server.references)}}); }
@@ -457,6 +457,8 @@ function boot({failFirstRead=false, list=[], theme={theme:'light'}, thumbnails=f
   await panelA.$('choose').click(); await settle();
   await panelB.pollShelf(); await settle();
   assert.equal(panelB.rows().length,2,'another conversation sees additions when its project shelf refreshes');
+  await panelB.pollShelf(); await settle();
+  assert.equal(panelB.rows().length,2,'unchanged revision polling keeps the visible shelf');
   await panelB.rows()[0].children[1].click({clientX:1,clientY:1});
   await panelB.$('file-menu').querySelectorAll('button').find(b=>b.textContent==='移除参考').click(); await settle();
   await panelA.pollShelf(); await settle();

@@ -18,8 +18,8 @@ import threading
 import time
 import uuid
 
-VERSION = "0.7.0"
-URI = "ui://reference-test/panel-0.7.0.html"
+VERSION = "0.7.1"
+URI = "ui://reference-test/panel-0.7.1.html"
 MIME = "text/html;profile=mcp-app"
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
@@ -362,6 +362,9 @@ class ReferenceStore:
         migrated = data.get("migratedThreads", [])
         if not isinstance(migrated, list) or not all(isinstance(item, str) for item in migrated):
             raise ToolError("参考列表迁移记录无效", "store")
+        removed = data.get("removedPathHashes", [])
+        if not isinstance(removed, list) or not all(isinstance(item, str) for item in removed):
+            raise ToolError("参考列表移除记录无效", "store")
         return data
 
     def load(self, owner):
@@ -373,7 +376,8 @@ class ReferenceStore:
     def write(self, owner, references, document):
         payload = {"schema": 2, "revision": document["revision"] + 1,
                    "updatedAt": datetime.datetime.now(datetime.timezone.utc).isoformat(), "references": references,
-                   "migratedThreads": document.get("migratedThreads", [])}
+                   "migratedThreads": document.get("migratedThreads", []),
+                   "removedPathHashes": document.get("removedPathHashes", [])}
         target = self.path(owner)
         temporary = target.with_name(target.name + f".{os.getpid()}.tmp")
         with os.fdopen(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w", encoding="utf-8") as output:
@@ -413,7 +417,9 @@ class ReferenceStore:
             if claimed_elsewhere():
                 return current["revision"], clean_references(current["references"])
             if marker not in current.get("migratedThreads", []):
-                references = clean_references(current["references"] + old)
+                removed = set(current.get("removedPathHashes", []))
+                candidates = [item for item in old if hashlib.sha256(item["path"].encode()).hexdigest() not in removed]
+                references = clean_references(current["references"] + candidates)
                 if len(references) > MAX_REFERENCES:
                     raise ToolError(f"合并后超过 {MAX_REFERENCES} 个参考，原列表已保留", "too-many")
                 # Claim first: after a crash this project can retry, while a
@@ -441,6 +447,10 @@ class ReferenceStore:
             # A write based on an unread or outdated list must not replace it.
             if base_revision != revision:
                 return {"status": "conflict", "revision": revision, "references": current}
+            if owner.startswith("project:"):
+                before = {hashlib.sha256(item["path"].encode()).hexdigest() for item in current}
+                after = {hashlib.sha256(item["path"].encode()).hexdigest() for item in references}
+                document["removedPathHashes"] = sorted((set(document.get("removedPathHashes", [])) | (before - after)) - after)
             revision = self.write(owner, references, document)
             return {"status": "saved", "revision": revision, "references": references}
 
@@ -673,7 +683,9 @@ TOOLS = [
         "openai/widgetAccessible": True,
         "openai/ui": {"entrypoints": [{"type": "thread"}]},
     }),
-    tool("read_probe_context", "Read host tool context", "Return host metadata and the project-shared reference list. Falls back to the conversation when no project is resolved."),
+    tool("read_probe_context", "Read host tool context", "Return host metadata and the project-shared reference list. Falls back to the conversation when no project is resolved.",
+         {"type": "object", "properties": {"knownRevision": {"type": ["integer", "null"]},
+          "scopeId": {"type": ["string", "null"]}}, "additionalProperties": False}),
     tool("choose_reference_files", "选择文件（可多选）", "Show the local macOS file picker and return selected absolute paths. Does not read or upload file contents.",
          readonly=False, meta={"ui": {"visibility": ["app"]}, "openai/widgetAccessible": True}),
     tool("cancel_reference_selection", "取消文件选择", "Cancel this panel's open file picker without blocking other tools.",
@@ -728,8 +740,11 @@ def call_tool(name, args, meta):
     if name in ("open_reference_probe", "read_probe_context"):
         PICKER.warm()
         revision, references = STORE.load(owner)
-        return result({"probeContext": data, "references": with_status(references), "listRevision": revision,
-                       "listScope": scope["listScope"], "scopeId": scope["scopeId"], "project": scope["project"]})
+        info = {"probeContext": data, "listRevision": revision, "listScope": scope["listScope"],
+                "scopeId": scope["scopeId"], "project": scope["project"]}
+        if args.get("knownRevision") == revision and args.get("scopeId") == scope["scopeId"]:
+            return result({**info, "unchanged": True})
+        return result({**info, "references": with_status(references)})
     if name == "cancel_reference_selection":
         PICKER.cancel()
         return result({"cancelRequested": True})
