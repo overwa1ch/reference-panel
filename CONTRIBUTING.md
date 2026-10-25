@@ -6,6 +6,7 @@
 
 - `plugins/reference-native-test/server.py`：MCP 工具、路径列表和本机助手管理。
 - `plugins/reference-native-test/preview.py`：预览片段、权限范围、缩略图缓存。
+- `plugins/reference-native-test/project_scope.py`：项目范围与 Codex 只读路由查询；面板请求仅带对话 ID 时也须覆盖。
 - `plugins/reference-native-test/panel.html`：MCP Apps 界面和交互。
 - `plugins/reference-native-test/native-picker.m`：文件选择和拖放路径读取。
 - `plugins/reference-native-test/native-render.m`：文档、图片、缩略图和媒体元数据。

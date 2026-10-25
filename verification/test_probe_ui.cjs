@@ -99,7 +99,7 @@ function boot({failFirstRead=false, list=[], theme={theme:'light'}, thumbnails=f
       const error=(text,code)=>({isError:true,content:[{type:'text',text}],structuredContent:{error:{code,message:text}}});
       if(name==='read_probe_context') {
         if(h.failRead) { h.failRead=false; result=error('fixture read failed','store'); }
-        else result=ok({...(args.knownRevision===server.revision && args.scopeId===server.scopeId?{unchanged:true}:{references:structuredClone(server.references)}),listRevision:server.revision,listScope:server.scope,scopeId:server.scopeId,project:server.project});
+        else result=ok({...(args.knownRevision===server.revision && args.scopeId===server.scopeId?{unchanged:true}:{references:structuredClone(server.references)}),listRevision:server.revision,listScope:server.scope,scopeId:server.scopeId,project:server.project,projectLookup:server.projectLookup});
       } else if(name==='save_reference_list') {
         if((server.scope==='project' || args.scopeId!=null) && args.scopeId!==server.scopeId) result=error('项目已变更','scope-changed');
         else if(args.baseRevision!==server.revision) { server.conflicts++; result=ok({list:{status:'conflict',revision:server.revision,references:structuredClone(server.references)}}); }
@@ -467,6 +467,14 @@ function boot({failFirstRead=false, list=[], theme={theme:'light'}, thumbnails=f
   await panelA.$('refresh').click(); await settle();
   assert.equal(panelA.rows().length,0,'a project switch accepts its own revision and never keeps old rows');
   assert.match(panelA.$('scope-label').textContent,/另一项目/);
+
+  const failedScope={revision:0,references:[],saves:[],conflicts:0,scope:'conversation',scopeId:'fallback',project:null,projectLookup:'failed'};
+  const fallback=boot({serverState:failedScope}); await settle();
+  assert.equal(fallback.$('scope-label').hidden,false);
+  assert.match(fallback.$('scope-label').textContent,/项目识别失败/);
+  failedScope.scope='project';failedScope.scopeId='resolved';failedScope.project={name:'已恢复项目',root:'/fixture/recovered'};failedScope.projectLookup='resolved';
+  await fallback.pollShelf(); await settle();
+  assert.match(fallback.$('scope-label').textContent,/已恢复项目 · 项目共享/);
 
   console.log('PASS synthetic UI: list scope, thumbnails/grid/list, theme tokens, restore/conflict merge, drag/add, picker, PDF paging, menu keyboard, focus survival, video/text, stale responses, large assembly/cancel, remove/undo, multi-select, host requests, missing/relink');
 })().catch(e=>{console.error(e);process.exitCode=1;});

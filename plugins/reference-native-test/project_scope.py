@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import queue
+import re
 import shutil
 import subprocess
 import threading
@@ -112,7 +113,10 @@ class ProjectScopes:
                 if root:
                     source = 'host-metadata'
                     break
-        codex = isinstance(meta.get('x-codex-turn-metadata'), dict) or isinstance(meta.get('plugin_id'), str)
+        # Widget-initiated calls commonly carry only threadId/thread_id. The
+        # agent-only plugin/turn metadata must not gate project resolution.
+        codex = (isinstance(meta.get('x-codex-turn-metadata'), dict) or isinstance(meta.get('plugin_id'), str)
+                 or bool(thread and re.fullmatch(r'[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}', thread)))
         project = meta.get('project') if isinstance(meta.get('project'), dict) else {}
         project_id = meta.get('projectId') or meta.get('project_id') or project.get('id')
         project_id = project_id if isinstance(project_id, str) and 0 < len(project_id) <= 256 and not any(ord(c) < 32 for c in project_id) else None
@@ -138,6 +142,7 @@ class ProjectScopes:
         owner = 'project:path:' + root if root else 'project:id:' + project_id if project_id else thread or 'shared:no-conversation-id'
         return {'owner': owner, 'scopeId': hashlib.sha256(owner.encode()).hexdigest(),
                 'listScope': 'project' if root or project_id else 'conversation' if thread else 'shared',
+                'projectLookup': 'resolved' if root or project_id else 'failed' if thread and codex else 'not-provided',
                 'project': {'root': root, 'name': (Path(root).name or root) if root else project_id,
                             'source': source or 'host-metadata'} if root or project_id else None,
                 'thread': thread}

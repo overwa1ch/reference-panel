@@ -18,8 +18,8 @@ import threading
 import time
 import uuid
 
-VERSION = "0.7.1"
-URI = "ui://reference-test/panel-0.7.1.html"
+VERSION = "0.7.2"
+URI = "ui://reference-test/panel-0.7.2.html"
 MIME = "text/html;profile=mcp-app"
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
@@ -365,6 +365,9 @@ class ReferenceStore:
         removed = data.get("removedPathHashes", [])
         if not isinstance(removed, list) or not all(isinstance(item, str) for item in removed):
             raise ToolError("参考列表移除记录无效", "store")
+        revisions = data.get("legacyRevisions", {})
+        if not isinstance(revisions, dict) or not all(isinstance(k, str) and type(v) is int and v >= 0 for k, v in revisions.items()):
+            raise ToolError("参考列表迁移修订无效", "store")
         return data
 
     def load(self, owner):
@@ -377,7 +380,8 @@ class ReferenceStore:
         payload = {"schema": 2, "revision": document["revision"] + 1,
                    "updatedAt": datetime.datetime.now(datetime.timezone.utc).isoformat(), "references": references,
                    "migratedThreads": document.get("migratedThreads", []),
-                   "removedPathHashes": document.get("removedPathHashes", [])}
+                   "removedPathHashes": document.get("removedPathHashes", []),
+                   "legacyRevisions": document.get("legacyRevisions", {})}
         target = self.path(owner)
         temporary = target.with_name(target.name + f".{os.getpid()}.tmp")
         with os.fdopen(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w", encoding="utf-8") as output:
@@ -386,7 +390,7 @@ class ReferenceStore:
         return payload["revision"]
 
     def migrate(self, owner, thread):
-        """Merge an old chat list once, retaining the original and a durable marker."""
+        """Merge changed legacy lists, retaining originals and removal protections."""
         if not thread or thread == owner:
             return self.load(owner)
         marker = self.path(thread).stem
@@ -405,9 +409,9 @@ class ReferenceStore:
             return destination != scope_id
         if claimed_elsewhere():
             return current["revision"], clean_references(current["references"])
-        if marker in current.get("migratedThreads", []):
+        old_revision, old = self.load(thread)
+        if marker in current.get("migratedThreads", []) and current.get("legacyRevisions", {}).get(marker, -1) >= old_revision:
             return current["revision"], clean_references(current["references"])
-        _, old = self.load(thread)
         if not old and not self.path(thread).exists():
             return current["revision"], clean_references(current["references"])
         LIST_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -416,7 +420,7 @@ class ReferenceStore:
             current = self.document(owner)
             if claimed_elsewhere():
                 return current["revision"], clean_references(current["references"])
-            if marker not in current.get("migratedThreads", []):
+            if marker not in current.get("migratedThreads", []) or current.get("legacyRevisions", {}).get(marker, -1) < old_revision:
                 removed = set(current.get("removedPathHashes", []))
                 candidates = [item for item in old if hashlib.sha256(item["path"].encode()).hexdigest() not in removed]
                 references = clean_references(current["references"] + candidates)
@@ -428,7 +432,9 @@ class ReferenceStore:
                 with os.fdopen(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w", encoding="utf-8") as output:
                     json.dump({"scopeId": scope_id}, output)
                 os.replace(temporary, claim)
-                current["migratedThreads"] = current.get("migratedThreads", []) + [marker]
+                if marker not in current.get("migratedThreads", []):
+                    current["migratedThreads"] = current.get("migratedThreads", []) + [marker]
+                current["legacyRevisions"] = {**current.get("legacyRevisions", {}), marker: old_revision}
                 revision = self.write(owner, references, current)
                 return revision, references
             return current["revision"], clean_references(current["references"])
@@ -741,7 +747,7 @@ def call_tool(name, args, meta):
         PICKER.warm()
         revision, references = STORE.load(owner)
         info = {"probeContext": data, "listRevision": revision, "listScope": scope["listScope"],
-                "scopeId": scope["scopeId"], "project": scope["project"]}
+                "scopeId": scope["scopeId"], "project": scope["project"], "projectLookup": scope["projectLookup"]}
         if args.get("knownRevision") == revision and args.get("scopeId") == scope["scopeId"]:
             return result({**info, "unchanged": True})
         return result({**info, "references": with_status(references)})

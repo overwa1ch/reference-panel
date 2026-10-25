@@ -333,6 +333,60 @@ class ProjectSharingTests(unittest.TestCase):
         with patch.object(module, 'codex_thread_project', return_value=None):
             self.assertEqual(resolver.resolve({'threadId': 'Missing', 'plugin_id': 'x'})['listScope'], 'conversation')
 
+    def test_panel_only_thread_metadata_shares_the_project_without_agent_hints(self):
+        module = probe.sys.modules['project_scope']
+        first = '00000000-0000-4000-8000-000000000001'
+        second = '00000000-0000-4000-8000-000000000002'
+        third = '00000000-0000-4000-8000-000000000003'
+        def lookup(thread):
+            return {'root': str(self.root if thread != third else self.folder / 'Another project'), 'source': 'codex-thread'}
+        def call(thread, name='read_probe_context', args=None):
+            return probe.dispatch('tools/call', {'name': name, 'arguments': args or {},
+                                  '_meta': {'threadId': thread, 'thread_id': thread}})
+        with patch.object(module, 'codex_thread_project', side_effect=lookup):
+            a = call(first)['structuredContent']
+            self.assertEqual(a['listScope'], 'project')
+            self.assertEqual(a['projectLookup'], 'resolved')
+            saved = call(first, 'save_reference_list', {'references': [{'path': str(self.file)}],
+                         'baseRevision': a['listRevision'], 'scopeId': a['scopeId']})
+            self.assertEqual(saved['structuredContent']['list']['status'], 'saved')
+            b = call(second)['structuredContent']
+            self.assertEqual(b['scopeId'], a['scopeId'])
+            self.assertEqual(b['references'][0]['path'], str(self.file))
+            self.assertEqual(call(third)['structuredContent']['references'], [])
+        fresh = probe.ProjectScopes()
+        with patch.object(module, 'codex_thread_project', return_value=None):
+            self.assertEqual(fresh.resolve({'threadId': first})['projectLookup'], 'failed')
+
+    def test_legacy_panel_edits_after_initial_migration_are_not_stranded(self):
+        other, newest = self.folder / 'other.txt', self.folder / 'newest.txt'
+        other.write_text('other')
+        newest.write_text('newest')
+        probe.STORE.save('A', [{'path': str(self.file)}], 0)
+        self.read()
+        probe.STORE.save('A', [{'path': str(self.file)}, {'path': str(other)}], 1)
+        merged = self.read()
+        self.assertEqual(len(merged['references']), 2)
+        self.save([], merged)
+        probe.STORE.save('A', [{'path': str(self.file)}, {'path': str(other)}, {'path': str(newest)}], 2)
+        self.assertEqual([item['path'] for item in self.read()['references']], [str(newest)])
+
+    def test_071_migration_markers_recover_unmerged_conversation_entries(self):
+        other = self.folder / 'after-migration.txt'
+        other.write_text('other')
+        probe.STORE.save('A', [{'path': str(self.file)}], 0)
+        first = self.read()
+        owner = probe.PROJECTS.resolve({'projectRoot': str(self.root)})['owner']
+        document = probe.STORE.document(owner)
+        document.pop('legacyRevisions')  # Existing 0.7.1 state lacks this field.
+        probe.STORE.path(owner).write_text(json.dumps(document))
+        probe.STORE.save('A', [{'path': str(self.file)}, {'path': str(other)}], 1)
+        repaired = self.read()
+        self.assertEqual(len(repaired['references']), 2)
+        self.assertGreater(repaired['listRevision'], first['listRevision'])
+        self.save([], repaired)
+        self.assertEqual(self.read()['references'], [])
+
     def test_media_leases_are_still_private_to_each_conversation(self):
         video = self.folder / 'clip.mp4'
         video.write_bytes(b'fixture')

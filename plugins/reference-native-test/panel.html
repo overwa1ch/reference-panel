@@ -344,7 +344,7 @@
 </main>
 <div class="drop-overlay" aria-hidden="true"><div class="drop-card"><span class="drop-icon"><svg viewBox="0 0 16 16"><use href="#icon-plus"/></svg></span><strong id="drop-title">松开添加参考</strong><span>仅保存路径，不复制原文件</span></div></div>
 <details class="diagnostics">
-  <summary><svg class="chevron" aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-next"/></svg>诊断信息<span class="version">0.7.1</span></summary>
+  <summary><svg class="chevron" aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-next"/></svg>诊断信息<span class="version">0.7.2</span></summary>
   <div class="diagnostic-body">
     <div id="bridge" class="status">正在连接…</div>
     <div class="row"><button id="refresh" class="pill" type="button" disabled>刷新</button><button id="save" class="pill" type="button" disabled>保存记录</button><button id="copy" class="pill" type="button">复制诊断</button></div>
@@ -363,12 +363,12 @@
 (() => {
   'use strict';
   const $ = id => document.getElementById(id);
-  const VERSION = '0.7.1';
+  const VERSION = '0.7.2';
   const state = { schema: 3, version: VERSION, panelInstance: crypto.randomUUID(), openedAt: new Date().toISOString(), host: {}, toolContext: null, drops: [], selections: [], references: [], events: [] };
   const pending = new Map(); let rpcId = 0, ready = false, picking = false, resolving = false, actionBusy = false;
   // List persistence: local edits are ops replayed onto the server's latest list.
   let listRevision = null, listLoaded = false, restoreError = null, pendingOps = [], saveLoop = null;
-  let listScope = 'conversation', scopeId = null, project = null;
+  let listScope = 'conversation', scopeId = null, project = null, projectLookup = null;
   // Explicit multi-selection (Cmd/Shift click, Cmd+A); a plain click previews instead.
   let selected = new Set(), anchorPath = null, lastUndo = null, statusTimer = null, hostVariables = [];
   let previewSerial = 0, activePreview = null, activeLease = null, activeBlob = null, staleBlobs = [], previewTimer = null;
@@ -611,9 +611,9 @@
     const scopeText=listScope==='project'?'同一项目的所有对话共用这份列表':listScope==='shared'?'所有对话共用这份列表':'列表跟随当前对话';
     $('empty-text').textContent=restoreError && empty ? restoreError : '拖入视频、图片或文档，或点「添加」多选\n'+scopeText+'，仅保存路径';
     $('file-count').title=scopeText;
-    $('scope-label').hidden=listScope!=='project';
-    $('scope-label').textContent=(project?.name || '当前项目')+' · 项目共享';
-    $('scope-label').title=project?.root || '';
+    $('scope-label').hidden=listScope!=='project' && projectLookup!=='failed';
+    $('scope-label').textContent=listScope==='project'?(project?.name || '当前项目')+' · 项目共享':'项目识别失败 · 暂按对话保存';
+    $('scope-label').title=project?.root || (projectLookup==='failed'?'尚未取得项目目录，当前参考没有在项目内共享':'');
     $('empty-retry').hidden=!(restoreError && empty); $('empty-add').hidden=Boolean(restoreError);
     const list=$('file-list');
     const wanted=new Set(files.map(f=>f.path));
@@ -901,7 +901,7 @@
         closePreview(); listRevision=null; listLoaded=false; selected.clear(); lastUndo=null; anchorPath=null;
         state.references=[];
       }
-      scopeId=response?.scopeId || null; project=response?.project || null;
+      scopeId=response?.scopeId || null; project=response?.project || null; projectLookup=response?.projectLookup || null;
       // An in-flight save will report the newer revision itself.
       if(['shared','conversation','project'].includes(response?.listScope)) listScope=response.listScope;
       if(!saveLoop && !response?.unchanged) adoptList(response?.references,response?.listRevision);
@@ -915,7 +915,7 @@
   }
   // Compact, bounded diagnostics; the reference list itself is saved separately.
   const snapshot = () => ({schema:state.schema,version:VERSION,panelInstance:state.panelInstance,openedAt:state.openedAt,
-    hostInfo:state.host.hostInfo || null,theme:state.host.hostContext?.theme || null,referenceCount:state.references.length,listRevision,listScope,scopeId,project,
+    hostInfo:state.host.hostInfo || null,theme:state.host.hostContext?.theme || null,referenceCount:state.references.length,listRevision,listScope,scopeId,project,projectLookup,
     pendingOps:pendingOps.length,events:state.events,
     drops:state.drops.slice(-5).map(d=>({...d,strings:d.strings.map(s=>({type:s.type,value:s.value.slice(0,2000)}))})),
     selections:state.selections.map(s=>({time:s.time,status:s.status,source:s.source,fileCount:s.files?.length || 0})),
@@ -1320,7 +1320,7 @@
   function watchShelf() {
     clearTimeout(shelfTimer);
     shelfTimer=setTimeout(async()=>{
-      if(ready && listScope==='project' && document.visibilityState!=='hidden' && !picking && !resolving) await refresh({incremental:true});
+      if(ready && (listScope==='project' || projectLookup==='failed') && document.visibilityState!=='hidden' && !picking && !resolving) await refresh({incremental:true});
       if(ready) watchShelf();
     },3000);
   }
