@@ -18,8 +18,8 @@ import threading
 import time
 import uuid
 
-VERSION = "0.6.1"
-URI = "ui://reference-test/panel-0.6.1.html"
+VERSION = "0.6.2"
+URI = "ui://reference-test/panel-0.6.2.html"
 MIME = "text/html;profile=mcp-app"
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
@@ -738,7 +738,7 @@ def dispatch(method, params):
         if params.get("uri") != URI:
             raise ValueError("Unknown resource URI")
         return {"contents": [{"uri": URI, "mimeType": MIME, "text": (ROOT / "panel.html").read_text(),
-                              "_meta": {"ui": {"prefersBorder": True, "csp": {"connectDomains": [], "resourceDomains": ["blob:"]}},
+                              "_meta": {"ui": {"prefersBorder": True, "csp": {"connectDomains": [], "resourceDomains": ["blob:", "data:"], "frameDomains": ["blob:"]}},
                                         "openai/widgetPrefersBorder": True}}]}
     if method == "tools/call":
         try:

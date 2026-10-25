@@ -112,6 +112,43 @@ class InlinePreviewTests(unittest.TestCase):
                 self.assertEqual(base64.b64decode(tail['data']), b'TAIL')
                 self.service.release(preview['leaseId'], 'A')
 
+    def test_html_keeps_full_page_and_embedded_images_without_scripts_or_navigation(self):
+        page = self.folder / 'article.html'
+        tail = '<p id="end">文章结尾 &amp; 完整内容</p>'
+        page.write_text('<!doctype html><html><head><style>body{color:#123}</style>'
+                        '<meta http-equiv="refresh" content="0;url=https://example.invalid">'
+                        '</head><body onload="alert(1)"><script>parent.postMessage("bad", "*")</script>'
+                        '<iframe srcdoc="bad"></iframe><a href="https://example.invalid">source</a>'
+                        '<a href="#end">结尾</a><img src="data:image/png;base64,AAAA">'
+                        '<img src="https://example.invalid/tracker"><p>' + '正文' * 200000 + '</p>' + tail + '</body></html>', encoding='utf-8')
+        original = page.read_bytes()
+        preview = self.service.prepare(str(page), 'A')
+        self.assertEqual(preview['kind'], 'html')
+        self.assertEqual(preview['transport'], 'mcp-chunks')
+        self.assertNotIn('text', preview)
+        body = b''.join(base64.b64decode(self.service.read_chunk(preview['leaseId'], 'A', offset)['data'])
+                        for offset in range(0, preview['byteSize'], preview['chunkSize'])).decode()
+        self.assertIn(tail, body)
+        self.assertIn('body{color:#123}', body)
+        self.assertIn('src="data:image/png;base64,AAAA"', body)
+        self.assertIn('href="about:srcdoc#end"', body)
+        for unwanted in ('<script', '<iframe', 'onload=', 'https://example.invalid', 'http-equiv="refresh"'):
+            self.assertNotIn(unwanted, body)
+        self.assertIn('Content-Security-Policy', body)
+        self.assertIn("script-src 'none'", body)
+        temporary = Path(self.service.leases[preview['leaseId']]['target'])
+        self.service.release(preview['leaseId'], 'A')
+        self.assertFalse(temporary.parent.exists())
+        self.assertEqual(page.read_bytes(), original)
+
+    def test_html_declared_encoding_and_htm_extension(self):
+        page = self.folder / '中文.htm'
+        page.write_bytes('<meta charset="gb18030"><h1>完整中文页面</h1>'.encode('gb18030'))
+        preview = self.service.prepare(str(page), 'A')
+        body = base64.b64decode(self.service.read_chunk(preview['leaseId'], 'A', 0)['data']).decode('utf-8')
+        self.assertEqual(preview['kind'], 'html')
+        self.assertIn('<h1>完整中文页面</h1>', body)
+
     def test_real_pdf_pages_and_cache_cleanup(self):
         pdf = self.folder / 'reference.pdf'
         make_pdf(pdf)
@@ -149,7 +186,8 @@ class InlinePreviewTests(unittest.TestCase):
             chunk = output.pop('_meta')['referenceChunk']
             self.assertNotIn(chunk['data'], json.dumps(output))
             csp = probe.dispatch('resources/read', {'uri': probe.URI})['contents'][0]['_meta']['ui']['csp']
-            self.assertEqual(csp['resourceDomains'], ['blob:'])
+            self.assertEqual(csp['resourceDomains'], ['blob:', 'data:'])
+            self.assertEqual(csp['frameDomains'], ['blob:'])
             self.assertEqual(csp['connectDomains'], [])
             call('save_reference_list', {'references': [], 'baseRevision': 1})
             self.assertTrue(call('read_reference_preview_chunk', {'leaseId': preview['leaseId'], 'offset': 0})['isError'])

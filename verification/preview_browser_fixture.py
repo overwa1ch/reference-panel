@@ -87,7 +87,7 @@ else result={};frame.contentWindow.postMessage({jsonrpc:'2.0',id:m.id,result},lo
                     # Re-read on each load so page edits show up on refresh.
                     text = probe.dispatch('resources/read', {'uri': probe.URI})['contents'][0]['text']
                     self.send(text, 'text/html; charset=utf-8',
-                              "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src blob:; media-src blob:; connect-src 'none'; base-uri 'none'; form-action 'none'")
+                              "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src blob: data:; media-src blob: data:; frame-src blob:; connect-src 'none'; base-uri 'none'; form-action 'none'")
                 else:
                     self.send_error(404)
 

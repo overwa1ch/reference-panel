@@ -2,9 +2,12 @@
 import base64
 import codecs
 import hashlib
+from html import escape
+from html.parser import HTMLParser
 import json
 import mimetypes
 import os
+import re
 from pathlib import Path
 import secrets
 import shutil
@@ -21,8 +24,9 @@ UNPLAYABLE_VIDEO = {'.avi', '.mpg', '.mpeg', '.mts', '.m2ts', '.3gp', '.wmv', '.
 AUDIO = {'.mp3', '.m4a', '.wav', '.ogg', '.aac', '.flac'}
 IMAGE = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.avif', '.bmp'}
 RENDERED_IMAGE = {'.heic', '.heif', '.tif', '.tiff'}
+HTML = {'.html', '.htm'}
 TEXT = {'.txt', '.md', '.markdown', '.json', '.csv', '.tsv', '.log', '.yaml', '.yml', '.toml', '.ini', '.conf',
-        '.xml', '.html', '.htm', '.srt', '.vtt', '.ass', '.sh', '.py', '.js', '.ts', '.jsx', '.tsx', '.css', '.swift'}
+        '.xml', '.srt', '.vtt', '.ass', '.sh', '.py', '.js', '.ts', '.jsx', '.tsx', '.css', '.swift'}
 # textutil converts these locally without loading linked resources.
 DOCUMENT = {'.docx', '.doc', '.rtf', '.rtfd', '.odt'}
 THUMB_EDGE = 480
@@ -63,6 +67,88 @@ def decode_text(data, truncated):
         except UnicodeDecodeError:
             continue
     return data.decode('utf-8', errors='replace'), 'utf-8'
+
+
+class HTMLReader(HTMLParser):
+    """Keep a local page's layout and embedded images in a script-free document."""
+    HIDDEN = {'script', 'iframe', 'object', 'applet', 'template'}
+    OMIT = {'meta', 'base', 'link', 'embed', 'frame', 'frameset'}
+
+    def __init__(self, output):
+        super().__init__(convert_charrefs=False)
+        self.output = output
+        self.hidden = []
+
+    def handle_starttag(self, tag, attrs):
+        if self.hidden or tag in self.HIDDEN:
+            if tag in self.HIDDEN:
+                self.hidden.append(tag)
+            return
+        if tag in self.OMIT:
+            return
+        safe = []
+        for key, value in attrs:
+            if key.startswith('on') or key in {'srcdoc', 'action', 'formaction', 'target', 'ping', 'download', 'srcset'}:
+                continue
+            if key in {'href', 'xlink:href'} and not (value or '').startswith('#'):
+                continue
+            if key == 'href' and tag == 'a':
+                # srcdoc otherwise resolves #anchors against the panel's URL.
+                value = 'about:srcdoc' + value
+            if key == 'src' and not (value or '').lower().startswith('data:image/'):
+                continue
+            safe.append(' ' + key + (('="' + escape(value, quote=True) + '"') if value is not None else ''))
+        self.output.write('<' + tag + ''.join(safe) + '>')
+
+    def handle_startendtag(self, tag, attrs):
+        self.handle_starttag(tag, attrs)
+        self.handle_endtag(tag)
+
+    def handle_endtag(self, tag):
+        if self.hidden:
+            if tag == self.hidden[-1]:
+                self.hidden.pop()
+        elif tag not in self.HIDDEN | self.OMIT:
+            self.output.write('</' + tag + '>')
+
+    def handle_data(self, data):
+        if not self.hidden:
+            self.output.write(data)
+
+    def handle_entityref(self, name):
+        self.handle_data('&' + name + ';')
+
+    def handle_charref(self, name):
+        self.handle_data('&#' + name + ';')
+
+
+def html_document(source, target):
+    with source.open('rb') as stream:
+        prefix = stream.read(8192)
+    _, encoding = decode_text(prefix, True)
+    if prefix.startswith((codecs.BOM_UTF32_LE, codecs.BOM_UTF32_BE)):
+        encoding = 'utf-32'
+    elif prefix.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
+        encoding = 'utf-16'
+    elif prefix.startswith(codecs.BOM_UTF8):
+        encoding = 'utf-8-sig'
+    else:
+        declared = re.search(br'<meta\b[^>]*\bcharset\s*=\s*[\x22\x27\s]*([a-zA-Z0-9_-]+)', prefix, re.I)
+        if declared:
+            try:
+                encoding = codecs.lookup(declared.group(1).decode('ascii')).name
+            except LookupError:
+                pass
+    policy = "default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
+    with source.open('r', encoding=encoding, errors='replace') as incoming, target.open('w', encoding='utf-8') as outgoing:
+        outgoing.write('<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="' + policy + '">')
+        parser = HTMLReader(outgoing)
+        while True:
+            part = incoming.read(64 * 1024)
+            if not part:
+                break
+            parser.feed(part)
+        parser.close()
 
 
 class PreviewService:
@@ -111,7 +197,17 @@ class PreviewService:
         directory = None
         target = source
         mime = mimetypes.guess_type(path)[0] or 'application/octet-stream'
-        if ext in VIDEO:
+        if ext in HTML:
+            kind = 'html'
+            directory = tempfile.mkdtemp(prefix='reference-html-preview-')
+            target = Path(directory) / 'document.html'
+            try:
+                html_document(source, target)
+            except Exception:
+                shutil.rmtree(directory, ignore_errors=True)
+                raise ToolError('无法读取 HTML 页面', 'unreadable') from None
+            mime = 'text/html; charset=utf-8'
+        elif ext in VIDEO:
             kind = 'video'
             # Chromium decodes the container from its bytes; MOV/H.264 shares
             # the MP4 demuxer even when video/quicktime isn't advertised.

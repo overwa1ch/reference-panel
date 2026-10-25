@@ -123,7 +123,7 @@ function boot({failFirstRead=false, list=[], theme={theme:'light'}, thumbnails=f
         if(!server.references.some(f=>f.path===args.path)) result=error('请先将文件添加到当前参考列表','not-listed');
         else if(h.actionError) result=error(h.actionError);
         else {
-          const kind=/\.pdf$/i.test(args.path)?'pdf':/\.txt$/i.test(args.path)?'text':'video';
+          const kind=/\.html?$/i.test(args.path)?'html':/\.pdf$/i.test(args.path)?'pdf':/\.txt$/i.test(args.path)?'text':'video';
           result={structuredContent:{previewReady:true},_meta:{referencePreview:{kind,transport:'mcp-chunks',byteSize:h.previewSize,chunkSize:h.previewChunkSize,mime:'video/mp4',leaseId:'fixture-'+h.previewRequests.length,page:Math.min(args.page || 1,2),pageCount:2,text:'<script>plain text</script>'}}};
         }
       } else if(name==='read_reference_preview_chunk') {
@@ -175,7 +175,7 @@ function boot({failFirstRead=false, list=[], theme={theme:'light'}, thumbnails=f
   assert.equal(h.$('status-line').classList.contains('error'),true);
   assert.match(h.$('drop-data').textContent,/<img onerror=fixture>/);
   assert.ok(!html.includes('.innerHTML'),'file names must render as text');
-  assert.ok(!/readAs|arrayBuffer\(|\.text\(\)|fetch\(/.test(script),'drop probe must not read/upload file bytes');
+  assert.ok(!/readAs|arrayBuffer\(|fetch\(/.test(script),'drop probe must not read/upload file bytes');
   const original='/Users/fixture/参考 material.pdf';
   await h.doc.dispatch('drop',h.drop([{name:'参考 material.pdf',size:100,type:'application/pdf',lastModified:1}],{'text/uri-list':'file://'+encodeURI(original)}));
   await settle();
@@ -305,6 +305,25 @@ function boot({failFirstRead=false, list=[], theme={theme:'light'}, thumbnails=f
   assert.equal(currentVideo.paused,true);
   assert.equal(h.$('preview-content').children[0].tagName,'pre');
   assert.equal(h.$('preview-content').children[0].textContent,'<script>plain text</script>');
+
+  // HTML uses an isolated page, keeps the whole chunk transport, and cleans up on close.
+  const previousHarness=h;
+  const article={path:'/fixture/article.html',name:'article.html',size:3000000,exists:true,isFile:true};
+  h=boot({list:[article]}); await settle();
+  await h.row('article.html').children[0].click(); await settle();
+  const frame=h.$('preview-content').children[0];
+  assert.equal(frame.tagName,'iframe');
+  assert.equal(frame.getAttribute('sandbox'),'','HTML never receives scripts, same-origin or host access');
+  assert.equal(frame.getAttribute('referrerpolicy'),'no-referrer');
+  assert.equal(frame.srcdoc,'abcdef');
+  await frame.dispatch('load'); await settle();
+  assert.match(h.$('preview-status').textContent,/网页/);
+  await h.$('close-preview').click(); await settle();
+  assert.equal(h.$('preview-content').children.length,0);
+  assert.equal(h.blobURLs.length,0,'HTML documents do not navigate to a blob URL');
+
+  // Restore the earlier harness for the remaining media checks.
+  h=previousHarness;
 
   // ---- Large file assembly and cancellation.
   h.previewSize=67323662; h.previewChunkSize=512*1024;

@@ -112,10 +112,12 @@
   .preview-stage[data-kind="pdf"] { height: auto; min-height: 200px; max-height: min(70vh, 640px); place-items: start center; padding: 14px; }
   .preview-stage[data-kind="message"] { height: 200px; }
   .preview-stage[data-kind="text"] { height: auto; min-height: 120px; max-height: min(60vh, 520px); place-items: stretch; background: var(--surface); }
+  .preview-stage[data-kind="html"] { height: min(68vh, 720px); min-height: 280px; overflow: hidden; background: #fff; }
   #preview-content { width: 100%; height: 100%; min-height: 0; display: grid; place-items: center; transition: opacity .15s; }
   #preview-content:empty { display: none; }
   #preview-content video { display: block; width: 100%; height: 100%; object-fit: contain; }
   #preview-content audio { width: 100%; }
+  #preview-content iframe { display: block; border: 0; width: 100%; height: 100%; background: #fff; }
   #preview-content img { display: block; max-width: 100%; max-height: min(60vh, 560px); object-fit: contain; }
   .preview-stage[data-kind="pdf"] #preview-content img { width: 100%; max-height: none; height: auto; background: #fff; border-radius: 3px; box-shadow: 0 0 0 1px rgb(0 0 0 / .06), 0 2px 8px -2px rgb(0 0 0 / .18); }
   #preview-content pre { align-self: stretch; justify-self: stretch; width: 100%; margin: 0; padding: 14px 16px; white-space: pre-wrap; overflow-wrap: anywhere; font: var(--fs-xs)/1.7 var(--mono); color: var(--text); }
@@ -341,7 +343,7 @@
 </main>
 <div class="drop-overlay" aria-hidden="true"><div class="drop-card"><span class="drop-icon"><svg viewBox="0 0 16 16"><use href="#icon-plus"/></svg></span><strong id="drop-title">松开添加参考</strong><span>仅保存路径，不复制原文件</span></div></div>
 <details class="diagnostics">
-  <summary><svg class="chevron" aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-next"/></svg>诊断信息<span class="version">0.6.1</span></summary>
+  <summary><svg class="chevron" aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-next"/></svg>诊断信息<span class="version">0.6.2</span></summary>
   <div class="diagnostic-body">
     <div id="bridge" class="status">正在连接…</div>
     <div class="row"><button id="refresh" class="pill" type="button" disabled>刷新</button><button id="save" class="pill" type="button" disabled>保存记录</button><button id="copy" class="pill" type="button">复制诊断</button></div>
@@ -360,7 +362,7 @@
 (() => {
   'use strict';
   const $ = id => document.getElementById(id);
-  const VERSION = '0.6.1';
+  const VERSION = '0.6.2';
   const state = { schema: 3, version: VERSION, panelInstance: crypto.randomUUID(), openedAt: new Date().toISOString(), host: {}, toolContext: null, drops: [], selections: [], references: [], events: [] };
   const pending = new Map(); let rpcId = 0, ready = false, picking = false, resolving = false, actionBusy = false;
   // List persistence: local edits are ops replayed onto the server's latest list.
@@ -382,9 +384,9 @@
   const KINDS = [
     ['video', /^(mp4|mov|m4v|webm|mkv|avi|mpg|mpeg|mts|m2ts|3gp|wmv|flv)$/], ['audio', /^(mp3|m4a|wav|ogg|aac|flac|aiff?)$/],
     ['image', /^(png|jpe?g|gif|webp|svg|avif|bmp|heic|heif|tiff?)$/], ['pdf', /^pdf$/],
-    ['document', /^(docx?|rtfd?|odt|pages|key|numbers|xlsx?|pptx?|epub)$/],
-    ['text', /^(txt|md|markdown|json|csv|tsv|log|ya?ml|toml|ini|conf|xml|html?|srt|vtt|ass|sh|py|js|ts|jsx|tsx|css|swift)$/]];
-  const KIND_LABEL = {video:'视频', audio:'音频', image:'图片', pdf:'PDF', document:'文档', text:'文本', package:'文件包', file:'文件'};
+    ['document', /^(docx?|rtfd?|odt|pages|key|numbers|xlsx?|pptx?|epub)$/], ['html', /^html?$/],
+    ['text', /^(txt|md|markdown|json|csv|tsv|log|ya?ml|toml|ini|conf|xml|srt|vtt|ass|sh|py|js|ts|jsx|tsx|css|swift)$/]];
+  const KIND_LABEL = {video:'视频', audio:'音频', image:'图片', pdf:'PDF', html:'网页', document:'文档', text:'文本', package:'文件包', file:'文件'};
   function event(type, data) { state.events.push({ time: new Date().toISOString(), type, data }); state.events = state.events.slice(-40); }
   function notify(method, params) { window.parent.postMessage({jsonrpc:'2.0',method,params}, '*'); }
   function request(method, params, timeout = 12000) {
@@ -435,7 +437,7 @@
     if(file.isPackage && !/^(rtfd)$/.test(ext)) return KINDS.find(([,re])=>re.test(ext))?.[0]==='document' ? 'document' : 'package';
     return KINDS.find(([,re])=>re.test(ext))?.[0] || 'file';
   }
-  const iconFor = kind => kind==='file' ? 'file' : kind;
+  const iconFor = kind => kind==='html' ? 'text' : kind==='file' ? 'file' : kind;
   const PAGE_KINDS = new Set(['pdf','document','text']);
   function duration(seconds) {
     if(!(seconds>0)) return '';
@@ -997,7 +999,7 @@
     paintThumb($('preview-icon'),file,kind);
     return kind;
   }
-  async function loadPreviewBlob(preview,serial) {
+  async function loadPreviewBlob(preview,serial,{document=false}={}) {
     const size=preview.byteSize, chunkSize=preview.chunkSize;
     if(preview.transport!=='mcp-chunks' || !Number.isSafeInteger(size) || size<0 ||
        !Number.isSafeInteger(chunkSize) || chunkSize<1 || chunkSize>512*1024 || typeof preview.mime!=='string') {
@@ -1024,7 +1026,8 @@
     try {
       await Promise.all([worker(),worker(),worker()]);
       if(serial!==previewSerial) return null;
-      return URL.createObjectURL(new Blob(parts,{type:preview.mime}));
+      const blob=new Blob(parts,{type:preview.mime});
+      return document ? blob.text() : URL.createObjectURL(blob);
     } finally { stopped=true; parts.length=0; }
   }
   async function showPreview(file,page=1,{keep=false}={}) {
@@ -1080,14 +1083,21 @@
         showMessage({text:preview.message,iconName:preview.reason==='package'?'package':iconFor(kind),actions:externalActions(file)});
         $('preview-status').textContent=preview.reason==='icloud'?'尚未下载':'暂不支持此格式';
       } else {
-        const blobUrl=await loadPreviewBlob(preview,serial);
-        if(serial!==previewSerial) { if(blobUrl) URL.revokeObjectURL(blobUrl); return; }
-        activeBlob=blobUrl;
+        const html=preview.kind==='html';
+        const payload=await loadPreviewBlob(preview,serial,{document:html});
+        if(serial!==previewSerial) { if(payload && !html) URL.revokeObjectURL(payload); return; }
+        if(!html) activeBlob=payload;
         void releasePreview(activeLease); activeLease=null;
         const isMedia=preview.kind==='video' || preview.kind==='audio';
-        const media=node(isMedia?preview.kind:'img','');
+        const media=node(preview.kind==='html'?'iframe':isMedia?preview.kind:'img','');
         media.setAttribute('aria-label',nameOf(file)); media.draggable=false;
-        if(isMedia) {
+        if(preview.kind==='html') {
+          media.setAttribute('sandbox','');
+          media.setAttribute('referrerpolicy','no-referrer');
+          media.title=nameOf(file);
+          media.addEventListener('load',loaded);
+          media.addEventListener('error',()=>failed('网页预览未能加载，请重试。'));
+        } else if(isMedia) {
           media.controls=true; media.preload='auto'; media.playsInline=true;
           media.addEventListener('loadedmetadata',()=>{
             if(preview.kind==='video' && media.videoWidth && media.videoHeight) $('preview-stage').style.setProperty('--ratio',media.videoWidth+' / '+media.videoHeight);
@@ -1106,7 +1116,8 @@
         }
         setStageKind(preview.kind);
         previewTimer=setTimeout(()=>failed('加载时间较长，请重试。'),30000);
-        media.src=blobUrl; $('preview-content').replaceChildren(media);
+        if(html) media.srcdoc=payload; else media.src=payload;
+        $('preview-content').replaceChildren(media);
         if(preview.kind==='pdf') {
           activePreview.page=preview.page; activePreview.pageCount=preview.pageCount;
           $('page-controls').hidden=!(preview.pageCount>1); $('page-number').textContent=preview.page+' / '+preview.pageCount;
