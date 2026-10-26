@@ -18,8 +18,8 @@ import threading
 import time
 import uuid
 
-VERSION = "0.7.2"
-URI = "ui://reference-test/panel-0.7.2.html"
+VERSION = "0.8.0"
+URI = "ui://reference-test/panel-0.8.0.html"
 MIME = "text/html;profile=mcp-app"
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
@@ -40,7 +40,7 @@ THUMB_DIR = STATE_DIR / "thumbnails"
 THUMBNAILS = Thumbnails(ROOT, lambda: THUMB_DIR)
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".m4v", ".webm", ".avi", ".mkv", ".mpg", ".mpeg", ".mts", ".m2ts", ".3gp"}
 SECRET_KEY = re.compile(r"token|secret|password|authorization|cookie|credential|api.?key", re.I)
-REFERENCE_KEYS = {"name": str, "path": str, "source": str, "addedAt": str, "size": int, "lastModified": int,
+REFERENCE_KEYS = {"category": str, "name": str, "path": str, "source": str, "addedAt": str, "size": int, "lastModified": int,
                   "exists": (bool, type(None)), "isFile": (bool, type(None)), "isPackage": bool}
 MAX_REFERENCES = 2000
 MAX_BATCH = 150
@@ -302,6 +302,12 @@ def legacy_references(owner):
     return []
 
 
+def clean_category(value):
+    if not isinstance(value, str) or len(value) > 80 or any(ord(c) < 32 for c in value):
+        raise ToolError("分类名称须为 0–80 个字符，不能包含换行或控制字符", "invalid-category")
+    return value.strip()
+
+
 def clean_references(references):
     """Keep known fields of absolute-path entries, first occurrence per path."""
     cleaned, seen = [], set()
@@ -314,6 +320,8 @@ def clean_references(references):
         entry = {key: item[key] for key, kind in REFERENCE_KEYS.items()
                  if key in item and isinstance(item[key], kind) and not (isinstance(item[key], str) and len(item[key]) > 4096)}
         entry.setdefault("name", Path(path).name)
+        if "category" in entry:
+            entry["category"] = clean_category(entry["category"])
         seen.add(path)
         cleaned.append(entry)
     return cleaned
@@ -453,6 +461,11 @@ class ReferenceStore:
             # A write based on an unread or outdated list must not replace it.
             if base_revision != revision:
                 return {"status": "conflict", "revision": revision, "references": current}
+            # Older panels don't know category; omission must not erase it.
+            categories = {f["path"]: f["category"] for f in current if "category" in f}
+            for item in references:
+                if "category" not in item and item["path"] in categories:
+                    item["category"] = categories[item["path"]]
             if owner.startswith("project:"):
                 before = {hashlib.sha256(item["path"].encode()).hexdigest() for item in current}
                 after = {hashlib.sha256(item["path"].encode()).hexdigest() for item in references}
@@ -460,8 +473,81 @@ class ReferenceStore:
             revision = self.write(owner, references, document)
             return {"status": "saved", "revision": revision, "references": references}
 
+    def update_files(self, owner, entries, category=None, classify=False):
+        """Atomic additive import or category-only update, never a list replacement."""
+        LIST_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
+        with self.lock, open(LIST_DIR / ".lock", "a") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            document = self.document(owner)
+            current = clean_references(document["references"])
+            by_path = {f["path"]: f for f in current}
+            if classify and any(f["path"] not in by_path for f in entries):
+                raise ToolError("只能分类当前项目列表中已有的文件，请刷新后重试", "not-listed")
+            added, changed, skipped = [], [], []
+            for entry in entries:
+                path = entry["path"]
+                if path in by_path:
+                    if classify and by_path[path].get("category", "") != category:
+                        by_path[path]["category"] = category
+                        changed.append(path)
+                    else:
+                        skipped.append(path)
+                else:
+                    if category is not None:
+                        entry["category"] = category
+                    current.append(entry)
+                    by_path[path] = entry
+                    added.append(path)
+            if len(current) > MAX_REFERENCES:
+                raise ToolError(f"参考列表最多保存 {MAX_REFERENCES} 项", "too-many")
+            revision = document["revision"]
+            if added or changed:
+                present = {hashlib.sha256(f["path"].encode()).hexdigest() for f in current}
+                document["removedPathHashes"] = sorted(set(document.get("removedPathHashes", [])) - present)
+                revision = self.write(owner, current, document)
+            return {"status": "saved", "revision": revision, "references": current,
+                    "added": added, "categorized": changed, "skipped": skipped}
+
 
 STORE = ReferenceStore()
+
+
+def edit_reference_files(scope, paths, expected_scope, category=None, classify=False):
+    """Shared MCP/CLI entry point. Explicit paths only; no traversal or content reads."""
+    if not expected_scope or expected_scope != scope["scopeId"]:
+        raise ToolError("项目已变更，请先读取当前参考列表", "scope-changed")
+    root = (scope.get("project") or {}).get("root")
+    if scope["listScope"] != "project" or not root:
+        raise ToolError("需要明确的本地项目目录才能导入或分类", "no-project")
+    if not isinstance(paths, list) or not 1 <= len(paths) <= MAX_BATCH:
+        raise ToolError(f"一次请指定 1–{MAX_BATCH} 个文件路径", "invalid-paths")
+    if category is not None:
+        category = clean_category(category)
+    elif classify:
+        raise ToolError("请指定分类，空字符串表示未分类", "invalid-category")
+    stamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    entries, seen = [], set()
+    for path in paths:
+        if not isinstance(path, str) or not os.path.isabs(path) or "\x00" in path or len(path) > 4096:
+            raise ToolError("必须使用完整的本地文件绝对路径", "invalid-path")
+        if path in seen:
+            continue
+        seen.add(path)
+        entry = {"path": path}
+        if not classify:
+            try:
+                resolved = Path(path).resolve(strict=True)
+                resolved.relative_to(Path(root).resolve(strict=True))
+                info = resolved.stat()
+            except (OSError, ValueError, RuntimeError):
+                raise ToolError("导入文件必须存在于当前项目目录内（含符号链接目标）", "invalid-path") from None
+            if not stat.S_ISREG(info.st_mode):
+                raise ToolError("请逐个指定文件，不接受文件夹或特殊文件", "not-file")
+            entry.update(name=Path(path).name, source="agent-import", addedAt=stamp,
+                         size=info.st_size, lastModified=info.st_mtime_ns // 1000000,
+                         exists=True, isFile=True, isPackage=False)
+        entries.append(entry)
+    return STORE.update_files(scope["owner"], entries, category, classify)
 
 
 def saved_references(meta):
@@ -671,7 +757,8 @@ def tool(name, title, description, schema=None, readonly=True, meta=None):
     item = {
         "name": name, "title": title, "description": description,
         "inputSchema": schema or {"type": "object", "properties": {}, "additionalProperties": False},
-        "annotations": {"readOnlyHint": readonly, "destructiveHint": False, "openWorldHint": False},
+        "annotations": {"readOnlyHint": readonly, "destructiveHint": False, "openWorldHint": False,
+                        **({"idempotentHint": True} if name in {"import_reference_files", "set_reference_category"} else {})},
     }
     item["_meta"] = {"ui": {"visibility": ["model", "app"]}, "openai/widgetAccessible": True, **(meta or {})}
     item["_meta"]["ui"].setdefault("visibility", ["model", "app"])
@@ -692,6 +779,14 @@ TOOLS = [
     tool("read_probe_context", "Read host tool context", "Return host metadata and the project-shared reference list. Falls back to the conversation when no project is resolved.",
          {"type": "object", "properties": {"knownRevision": {"type": ["integer", "null"]},
           "scopeId": {"type": ["string", "null"]}}, "additionalProperties": False}),
+    tool("import_reference_files", "导入项目参考文件", "Import explicitly user-requested local files into the current project's reference list. First read_probe_context for scopeId. Exact absolute file paths inside the project only; no folders, scanning, uploads or file content reads. Existing entries keep their category. Use set_reference_category to recategorize them.",
+         {"type": "object", "properties": {"scopeId": {"type": "string"},
+          "paths": {"type": "array", "minItems": 1, "maxItems": MAX_BATCH, "items": {"type": "string"}},
+          "category": {"type": "string", "maxLength": 80}}, "required": ["scopeId", "paths"], "additionalProperties": False}, readonly=False),
+    tool("set_reference_category", "设置参考分类", "Assign a user-requested category to exact paths already in the current project's list. First read_probe_context for scopeId. Empty category clears it. Does not move, read or change source files.",
+         {"type": "object", "properties": {"scopeId": {"type": "string"},
+          "paths": {"type": "array", "minItems": 1, "maxItems": MAX_BATCH, "items": {"type": "string"}},
+          "category": {"type": "string", "maxLength": 80}}, "required": ["scopeId", "paths", "category"], "additionalProperties": False}, readonly=False),
     tool("choose_reference_files", "选择文件（可多选）", "Show the local macOS file picker and return selected absolute paths. Does not read or upload file contents.",
          readonly=False, meta={"ui": {"visibility": ["app"]}, "openai/widgetAccessible": True}),
     tool("cancel_reference_selection", "取消文件选择", "Cancel this panel's open file picker without blocking other tools.",
@@ -734,7 +829,7 @@ TOOLS = [
 
 def call_tool(name, args, meta):
     data = context(meta)
-    scoped = name in {"open_reference_probe", "read_probe_context", "save_reference_list", "prepare_reference_preview",
+    scoped = name in {"import_reference_files", "set_reference_category", "open_reference_probe", "read_probe_context", "save_reference_list", "prepare_reference_preview",
                       "read_reference_thumbnails", "read_reference_preview_chunk", "release_reference_preview"}
     scope = PROJECTS.resolve(meta) if scoped else None
     owner = scope["owner"] if scope else drag_owner(meta) or SHARED_OWNER
@@ -754,6 +849,10 @@ def call_tool(name, args, meta):
     if name == "cancel_reference_selection":
         PICKER.cancel()
         return result({"cancelRequested": True})
+    if name in {"import_reference_files", "set_reference_category"}:
+        outcome = edit_reference_files(scope, args.get("paths"), args.get("scopeId"),
+                                       args.get("category"), name == "set_reference_category")
+        return result({"list": outcome, "scopeId": scope["scopeId"], "project": scope["project"]})
     if name == "save_reference_list":
         if (scope["listScope"] == "project" or args.get("scopeId") is not None) and args.get("scopeId") != scope["scopeId"]:
             raise ToolError("项目已变更或面板版本过旧，请重新打开参考面板后操作", "scope-changed")
@@ -848,7 +947,7 @@ def dispatch(method, params):
     raise MethodNotFound(method)
 
 
-SLOW_TOOLS = {"open_reference_probe", "read_probe_context", "capture_reference_drag", "resolve_reference_drop", "read_reference_thumbnails",
+SLOW_TOOLS = {"import_reference_files", "set_reference_category", "open_reference_probe", "read_probe_context", "capture_reference_drag", "resolve_reference_drop", "read_reference_thumbnails",
               "reference_file_action", "prepare_reference_preview", "read_reference_preview_chunk"}
 
 

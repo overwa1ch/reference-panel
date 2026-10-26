@@ -237,6 +237,19 @@
   .drop-card strong { font-size: var(--fs-sm); font-weight: var(--fw-semibold); }
   .drop-card span { color: var(--muted); font-size: var(--fs-xs); }
 
+  .shelf-filters { padding: 0 16px 12px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .category-tabs { display: flex; gap: 6px; flex-wrap: wrap; flex: 1; min-width: 0; }
+  .category-tabs button { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .category-tabs .pill[aria-pressed="true"] { background: var(--inverse-bg); color: var(--inverse-text); }
+  .reference-search, .category-input { min-width: 0; padding: 7px 10px; color: inherit; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; font: inherit; }
+  .reference-search { width: 180px; max-width: 100%; }
+  .category-editor { margin: 0 16px 12px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+  .category-editor label { display: block; margin-bottom: 8px; font-size: 13px; }
+  .category-fields { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .category-input { flex: 1; min-width: 140px; }
+  .category-badge { display: block; color: var(--muted); font-size: 11px; margin-top: 3px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  @media (max-width: 480px) { .reference-search { width: 100%; } .toolbar-actions { flex-wrap: wrap; } }
+
   /* Context menu */
   .file-menu { position: fixed; z-index: 30; min-width: 188px; max-width: calc(100vw - 16px); padding: 4px; background: var(--raised); border-radius: var(--r-md); box-shadow: 0 0 0 1px var(--line), var(--shadow-menu); animation: pop .12s var(--ease); transform-origin: top right; }
   .file-menu button { display: flex; align-items: center; gap: 8px; width: 100%; height: 30px; padding: 0 10px; border: 0; border-radius: var(--r-xs); background: transparent; text-align: left; font-size: var(--fs-xs); white-space: nowrap; }
@@ -304,7 +317,7 @@
 <header class="toolbar">
   <div class="heading"><h1>参考</h1><span id="file-count" class="count" aria-live="polite"></span></div>
   <div class="toolbar-actions">
-    <div id="bulk-bar" class="bulk-bar" hidden><span id="bulk-count" aria-live="polite"></span><button id="bulk-remove" class="ghost danger" type="button">移除</button><button id="bulk-clear" class="ghost" type="button">取消</button></div>
+    <div id="bulk-bar" class="bulk-bar" hidden><span id="bulk-count" aria-live="polite"></span><button id="bulk-category" class="ghost" type="button">分类</button><button id="bulk-remove" class="ghost danger" type="button">移除</button><button id="bulk-clear" class="ghost" type="button">取消</button></div>
     <div id="view-toggle" class="segmented" role="group" aria-label="显示方式"><button id="view-grid" type="button" title="缩略图" aria-label="缩略图" aria-pressed="true"><svg aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-grid"/></svg></button><button id="view-list" type="button" title="列表" aria-label="列表" aria-pressed="false"><svg aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-list"/></svg></button></div>
     <button id="cancel-choose" class="ghost" type="button" hidden>取消选择</button>
     <button id="choose" class="add-button" type="button" title="选择文件，支持多选" disabled><svg aria-hidden="true" viewBox="0 0 16 16"><use href="#icon-plus"/></svg><span id="choose-label">添加</span></button>
@@ -312,6 +325,21 @@
 </header>
 <p id="scope-label" class="standalone-note" hidden></p>
 <p id="standalone-note" class="standalone-note" hidden>这是界面源文件预览，未连接插件后台。请从 Codex 对话侧栏打开「参考」。</p>
+<div id="shelf-filters" class="shelf-filters" hidden>
+  <div id="category-tabs" class="category-tabs" role="group" aria-label="按分类筛选"></div>
+  <input id="reference-search" class="reference-search" type="search" placeholder="搜索参考名称…" aria-label="搜索参考名称">
+</div>
+<section id="category-editor" class="category-editor" aria-labelledby="category-label" hidden>
+  <label id="category-label" for="category-input">设置分类</label>
+  <div class="category-fields">
+    <input id="category-input" class="category-input" list="category-options" maxlength="80" placeholder="选择已有分类或输入新名称">
+    <datalist id="category-options"></datalist>
+    <button id="category-apply" class="pill" type="button">保存分类</button>
+    <button id="category-clear" class="ghost" type="button">设为未分类</button>
+    <button id="category-cancel" class="ghost" type="button">取消</button>
+  </div>
+</section>
+<p id="filter-empty" class="standalone-note" role="status" hidden>没有符合筛选条件的参考。</p>
 <div id="status-line" class="status-line" hidden><span id="picker-status" role="status" aria-live="polite"></span><button id="status-action" class="link-button" type="button" hidden></button></div>
 <main aria-label="参考">
   <section id="preview-board" class="preview-board" aria-label="参考预览" hidden>
@@ -344,7 +372,7 @@
 </main>
 <div class="drop-overlay" aria-hidden="true"><div class="drop-card"><span class="drop-icon"><svg viewBox="0 0 16 16"><use href="#icon-plus"/></svg></span><strong id="drop-title">松开添加参考</strong><span>仅保存路径，不复制原文件</span></div></div>
 <details class="diagnostics">
-  <summary><svg class="chevron" aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-next"/></svg>诊断信息<span class="version">0.7.2</span></summary>
+  <summary><svg class="chevron" aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-next"/></svg>诊断信息<span class="version">0.8.0</span></summary>
   <div class="diagnostic-body">
     <div id="bridge" class="status">正在连接…</div>
     <div class="row"><button id="refresh" class="pill" type="button" disabled>刷新</button><button id="save" class="pill" type="button" disabled>保存记录</button><button id="copy" class="pill" type="button">复制诊断</button></div>
@@ -363,12 +391,13 @@
 (() => {
   'use strict';
   const $ = id => document.getElementById(id);
-  const VERSION = '0.7.2';
+  const VERSION = '0.8.0';
   const state = { schema: 3, version: VERSION, panelInstance: crypto.randomUUID(), openedAt: new Date().toISOString(), host: {}, toolContext: null, drops: [], selections: [], references: [], events: [] };
   const pending = new Map(); let rpcId = 0, ready = false, picking = false, resolving = false, actionBusy = false;
   // List persistence: local edits are ops replayed onto the server's latest list.
   let listRevision = null, listLoaded = false, restoreError = null, pendingOps = [], saveLoop = null;
   let listScope = 'conversation', scopeId = null, project = null, projectLookup = null;
+  let categoryFilter = null, searchQuery = '', categoryTargets = [];
   // Explicit multi-selection (Cmd/Shift click, Cmd+A); a plain click previews instead.
   let selected = new Set(), anchorPath = null, lastUndo = null, statusTimer = null, hostVariables = [];
   let previewSerial = 0, activePreview = null, activeLease = null, activeBlob = null, staleBlobs = [], previewTimer = null;
@@ -487,6 +516,7 @@
     for(const op of ops) {
       if(op.type==='add') { const known=new Set(out.map(f=>f.path)); out=out.concat(op.files.filter(f=>!known.has(f.path))); }
       else if(op.type==='remove') { const gone=new Set(op.paths); out=out.filter(f=>!gone.has(f.path)); }
+      else if(op.type==='category') { const paths=new Set(op.paths); out=out.map(f=>paths.has(f.path)?{...f,category:op.category}:f); }
       else if(op.type==='replace') {
         // Relink keeps the row's position; a duplicate of the new path goes.
         out=out.filter(f=>f.path!==op.file.path || f.path===op.oldPath);
@@ -553,6 +583,53 @@
   }
 
   // ----- Rendering -----
+  const categoryOf = file => typeof file.category==='string' ? file.category : '';
+  const categories = () => [...new Set(state.references.map(categoryOf).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  function visibleFiles() {
+    return state.references.filter(f=>(categoryFilter===null || categoryOf(f)===categoryFilter) && nameOf(f).toLocaleLowerCase().includes(searchQuery));
+  }
+  function renderFilters() {
+    $('shelf-filters').hidden=!state.references.length;
+    const counts=new Map(); state.references.forEach(f=>counts.set(categoryOf(f),(counts.get(categoryOf(f)) || 0)+1));
+    if(categoryFilter && !counts.has(categoryFilter)) categoryFilter=null;
+    const choices=[[null,'全部',state.references.length],...categories().map(c=>[c,c,counts.get(c)]),['','未分类',counts.get('') || 0]];
+    const tabs=$('category-tabs');
+    const key=JSON.stringify([choices,categoryFilter]);
+    if(tabs.dataset.key===key) return;
+    const restoreFocus=tabs.contains(document.activeElement);
+    tabs.dataset.key=key; tabs.replaceChildren();
+    for(const [value,label,count] of choices) {
+      const b=node('button','pill',label+' '+count); b.type='button'; b.title=label;
+      b.setAttribute('aria-pressed',String(value===categoryFilter));
+      b.addEventListener('click',()=>{ categoryFilter=value; selected.clear(); anchorPath=null; closeCategoryEditor(); closeMenu(); renderFiles(); });
+      tabs.append(b);
+      if(restoreFocus && value===categoryFilter) b.focus();
+    }
+  }
+  function closeCategoryEditor() { $('category-editor').hidden=true; categoryTargets=[]; }
+  function editCategory(paths) {
+    categoryTargets=paths.filter(p=>state.references.some(f=>f.path===p));
+    if(!categoryTargets.length) return;
+    $('category-label').textContent='设置分类 · '+categoryTargets.length+' 项';
+    const values=new Set(state.references.filter(f=>categoryTargets.includes(f.path)).map(categoryOf));
+    $('category-input').value=values.size===1?[...values][0]:'';
+    $('category-options').replaceChildren(...categories().map(c=>{const option=node('option',''); option.value=c; return option;}));
+    $('category-editor').hidden=false; $('category-input').focus();
+  }
+  function saveCategory(value) {
+    if(!ready || !categoryTargets.length) return;
+    if(value.length>80 || /[\u0000-\u001f]/.test(value)) { setStatus('分类名称最多 80 个字符，不能包含换行',{error:true}); return; }
+    const paths=categoryTargets.slice(); closeCategoryEditor();
+    commit({type:'category',paths,category:value.trim()});
+    setStatus('已设置 '+paths.length+' 项分类');
+  }
+  $('reference-search').addEventListener('input',()=>{ searchQuery=$('reference-search').value.trim().toLocaleLowerCase(); selected.clear(); anchorPath=null; closeCategoryEditor(); renderFiles(); });
+  $('bulk-category').addEventListener('click',()=>editCategory([...selected]));
+  $('category-apply').addEventListener('click',()=>saveCategory($('category-input').value));
+  $('category-clear').addEventListener('click',()=>saveCategory(''));
+  $('category-cancel').addEventListener('click',closeCategoryEditor);
+  $('category-input').addEventListener('keydown',e=>{ if(e.key==='Enter') { e.preventDefault(); saveCategory($('category-input').value); } else if(e.key==='Escape') { e.preventDefault(); e.stopPropagation(); closeCategoryEditor(); } });
+
   function rowParts(file) {
     let row=rows.get(file.path);
     if(!row) {
@@ -562,7 +639,7 @@
       const check=node('span','check'); check.append(icon('check'));
       const info=node('span','file-info');
       const title=node('span','file-name'); const meta=node('span','file-meta');
-      info.append(title,meta);
+      const category=node('span','category-badge'); info.append(title,meta,category);
       const selectedNote=node('span','visually-hidden');
       preview.append(mark,info,selectedNote);
       const more=node('button','more-button'); more.type='button'; more.dataset.role='more';
@@ -574,7 +651,7 @@
       });
       li.addEventListener('contextmenu',e=>{ e.preventDefault(); menuFor(li.dataset.path,{x:e.clientX,y:e.clientY}); });
       li.append(preview,more,check);
-      row={li,preview,mark,title,meta,more,selectedNote,key:''};
+      row={li,preview,mark,title,meta,category,more,selectedNote,key:''};
       rows.set(file.path,row);
       thumbObserver?.observe(li);
     }
@@ -584,7 +661,7 @@
     const name=nameOf(file), kind=fileKind(file), missing=isMissing(file);
     const current=activePreview?.file.path===file.path, chosen=selected.has(file.path);
     const thumb=thumbs.get(file.path);
-    const key=[name,kind,missing,file.size,file.exists,current,chosen,thumb?.state,thumb?.url,thumb?.duration].join('|');
+    const key=[name,kind,missing,file.size,file.exists,current,chosen,categoryOf(file),thumb?.state,thumb?.url,thumb?.duration].join('|');
     if(row.key===key) return;
     row.key=key;
     row.li.classList.toggle('missing',missing); row.li.classList.toggle('selected',chosen);
@@ -593,6 +670,7 @@
     paintThumb(row.mark,file,kind);
     if(missing) { const badge=node('span','missing-badge'); badge.append(icon('warning'),node('span','','已失效')); row.mark.append(badge); }
     row.title.textContent=name; row.title.title=name;
+    row.category.textContent=categoryOf(file); row.category.hidden=!categoryOf(file);
     const ext=extOf(file).toUpperCase().slice(0,6);
     if(missing) row.meta.replaceChildren(icon('warning'),node('span','','文件已不在原位置'));
     else row.meta.replaceChildren(node('span','',[ext || KIND_LABEL[kind],duration(thumb?.duration),fileSize(file.size)].filter(Boolean).join(' · ')),node('span','dir','· '+shortDirectory(file)));
@@ -602,10 +680,13 @@
     row.more.setAttribute('aria-label',name+' 的更多操作');
   }
   function renderFiles() {
-    const files=state.references;
-    $('file-count').textContent=files.length ? String(files.length) : '';
-    const empty=files.length===0;
-    $('empty-state').hidden=!empty; $('file-list').hidden=empty;
+    renderFilters();
+    const files=visibleFiles();
+    const visiblePaths=new Set(files.map(f=>f.path)); selected=new Set([...selected].filter(p=>visiblePaths.has(p)));
+    $('file-count').textContent=state.references.length ? String(state.references.length) : '';
+    const empty=state.references.length===0;
+    $('empty-state').hidden=!empty; $('file-list').hidden=!files.length;
+    $('filter-empty').hidden=empty || files.length>0;
     $('empty-state').classList.toggle('error',Boolean(restoreError) && empty);
     $('empty-title').textContent=restoreError && empty ? '暂时无法读取参考列表' : '把参考放在手边';
     const scopeText=listScope==='project'?'同一项目的所有对话共用这份列表':listScope==='shared'?'所有对话共用这份列表':'列表跟随当前对话';
@@ -722,7 +803,7 @@
     fileAction('preview',file);
   }
   function selectRange(from, to) {
-    const paths=state.references.map(f=>f.path);
+    const paths=visibleFiles().map(f=>f.path);
     const a=paths.indexOf(from), b=paths.indexOf(to);
     if(a<0 || b<0) return;
     selected=new Set(paths.slice(Math.min(a,b),Math.max(a,b)+1));
@@ -734,7 +815,7 @@
     return Math.max(1,items.filter(item=>Math.abs(item.getBoundingClientRect().top-top)<2).length);
   }
   function moveFocus(path, delta, extend) {
-    const paths=state.references.map(f=>f.path);
+    const paths=visibleFiles().map(f=>f.path);
     if(!paths.length) return;
     const index=path ? paths.indexOf(path) : -1;
     const next=delta===Infinity ? paths.length-1 : delta===-Infinity ? 0 : Math.max(0,Math.min(paths.length-1,index+delta));
@@ -747,7 +828,7 @@
     if(e.key==='ArrowRight' || e.key==='ArrowLeft') { e.preventDefault(); moveFocus(path,e.key==='ArrowRight'?1:-1,e.shiftKey); }
     else if(e.key==='ArrowDown' || e.key==='ArrowUp') { e.preventDefault(); const step=columns(); moveFocus(path,e.key==='ArrowDown'?step:-step,e.shiftKey); }
     else if(e.key==='Home' || e.key==='End') { e.preventDefault(); moveFocus(path,e.key==='End'?Infinity:-Infinity,e.shiftKey); }
-    else if((e.key==='a' || e.key==='A') && (e.metaKey || e.ctrlKey)) { e.preventDefault(); selected=new Set(state.references.map(f=>f.path)); renderFiles(); }
+    else if((e.key==='a' || e.key==='A') && (e.metaKey || e.ctrlKey)) { e.preventDefault(); selected=new Set(visibleFiles().map(f=>f.path)); renderFiles(); }
     else if(e.key==='Delete' || e.key==='Backspace') {
       e.preventDefault();
       const paths=selected.size ? [...selected] : path ? [path] : [];
@@ -766,8 +847,8 @@
     if(!items.length) return;
     let nextFocus=null;
     if(focusAfter) {
-      const gone=new Set(paths), last=Math.max(...items.map(i=>i.index));
-      nextFocus=order.slice(last+1).find(p=>!gone.has(p)) || order.slice(0,last).reverse().find(p=>!gone.has(p)) || null;
+      const visible=visibleFiles().map(f=>f.path), gone=new Set(paths), last=Math.max(...paths.map(p=>visible.indexOf(p)));
+      nextFocus=visible.slice(last+1).find(p=>!gone.has(p)) || visible.slice(0,last).reverse().find(p=>!gone.has(p)) || null;
     }
     commit({type:'remove',paths:items.map(i=>i.file.path)});
     event('reference-removed',{count:items.length});
@@ -791,6 +872,7 @@
     const targets=selected.size>1 ? state.references.filter(f=>selected.has(f.path)) : [file];
     const items=targets.length>1 ? [
       ['复制 '+targets.length+' 个路径',async()=>{ const copied=await copyText(targets.map(f=>f.path).join('\n')); setStatus(copied?'路径已复制':'无法复制路径',{error:!copied}); }],
+      ['设置分类…',()=>editCategory(targets.map(f=>f.path))],
       null,
       ['移除 '+targets.length+' 个参考',()=>removeReferences(targets.map(f=>f.path),{focusAfter:true}),'remove'],
     ] : [
@@ -798,6 +880,7 @@
       ['Show in Finder',()=>fileAction('reveal',file)],
       ['用默认应用打开',()=>fileAction('open',file)],
       ['复制路径',async()=>{ const copied=await copyText(file.path); setStatus(copied?'路径已复制':'无法复制路径',{error:!copied}); }],
+      ['设置分类…',()=>editCategory([file.path])],
       ...(isMissing(file) ? [['重新定位…',()=>choose({relink:file})]] : []),
       null,
       ['移除参考',()=>removeReferences([file.path],{focusAfter:true}),'remove'],
@@ -898,7 +981,7 @@
           setStatus('项目已切换，仍有未保存的参考操作。请返回原项目处理后重新打开面板。',{error:true,sticky:true});
           return;
         }
-        closePreview(); listRevision=null; listLoaded=false; selected.clear(); lastUndo=null; anchorPath=null;
+        closePreview(); closeCategoryEditor(); categoryFilter=null; searchQuery=''; $('reference-search').value=''; listRevision=null; listLoaded=false; selected.clear(); lastUndo=null; anchorPath=null;
         state.references=[];
       }
       scopeId=response?.scopeId || null; project=response?.project || null; projectLookup=response?.projectLookup || null;
@@ -1165,7 +1248,7 @@
   function addFiles(files, {source, relink=null}) {
     const known=new Set(state.references.map(f=>f.path));
     const stamp=new Date().toISOString();
-    const entries=files.map(f=>({...f,addedAt:f.addedAt || stamp}));
+    const entries=files.map(f=>({...f,category:relink?categoryOf(relink):(categoryFilter || ''),addedAt:f.addedAt || stamp}));
     if(relink) {
       const file=entries[0];
       commit({type:'replace',oldPath:relink.path,file});

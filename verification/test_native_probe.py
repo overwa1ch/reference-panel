@@ -47,9 +47,9 @@ class NativeProbeTests(unittest.TestCase):
             self.assertEqual(tools[0]["_meta"]["openai/ui"]["entrypoints"], [{"type": "thread"}])
             for tool in tools:
                 self.assertIn("app", tool["_meta"]["ui"]["visibility"])
-            # The model can open and read the panel but never rewrite the list.
+            # Agent imports/categories are explicit and scoped; full-list replacement stays app-only.
             model_tools = {t["name"] for t in tools if "model" in t["_meta"]["ui"]["visibility"]}
-            self.assertEqual(model_tools, {"open_reference_probe", "read_probe_context"})
+            self.assertEqual(model_tools, {"open_reference_probe", "read_probe_context", "import_reference_files", "set_reference_category"})
             resource = rows[2]["result"]["contents"][0]
             self.assertEqual(resource["mimeType"], "text/html;profile=mcp-app")
             self.assertIn("ui/initialize", resource["text"])

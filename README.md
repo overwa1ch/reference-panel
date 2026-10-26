@@ -4,11 +4,13 @@ A local reference shelf for MCP Apps-enabled AI harnesses on macOS.
 
 把视频、图片和文档放进 AI harness 的参考面板，点击预览，右键在 Finder 中定位。通过标准 MCP stdio 与 MCP Apps 接入宿主；添加的是文件路径，移除参考会保留原文件。
 
-**状态：0.7.2，实验性源码预览版。** 自动检查和隔离环境验证通过；原生宿主及其他机器的完整验收仍待完成。请先用非敏感测试文件试用。独立社区项目。
+**状态：0.8.0，实验性源码预览版。** 自动检查和隔离环境验证通过；原生宿主及其他机器的完整验收仍待完成。请先用非敏感测试文件试用。独立社区项目。
 
 ## 功能
 
 - 拖入文件或通过 macOS 文件选择器多选添加。
+- 自定义分类、分类计数筛选和文件名搜索；多选后批量分类，新增文件继承当前分类。
+- Agent 可按用户明确要求导入项目内文件，并调整已有参考的分类。
 - 缩略图网格与列表视图，视频显示时长。
 - 面板内预览视频、音频、图片、PDF、HTML 网页和文本；部分办公文档可提取文字。
 - Show in Finder、用默认应用打开、复制路径、重新定位失效文件。
@@ -62,6 +64,23 @@ python3 scripts/mcp-config.py --project /absolute/path/to/project
 
 升级前的对话列表在该对话首次打开新版面板时自动合并，按路径去重，原记录保留。之后如旧面板继续写入独立列表，会按旧列表修订合并尚未迁入的新增参考。合并标记和已移除路径的摘要会保留，因此已移除的参考不会因重开旧对话或首次打开其他旧对话而重新出现。手动重新添加和撤销仍然可用。旧对话移到其他项目时，不会再次携带其历史列表。
 
+## 分类和 Agent 导入
+
+点击文件的「… → 设置分类」，可选已有分类或输入新名称；Cmd/Shift 多选后点「分类」批量设置。顶部分类按钮筛选当前项目，搜索只匹配文件名。分类为空即未分类；分类名随参考保存在项目列表中，不修改文件名或原文件。未使用的分类不再显示。新增参考继承当前分类；在「全部」中添加则为未分类。
+
+模型先调用 `read_probe_context` 取得当前 `scopeId` 和项目目录，再按用户明确指定的文件调用 `import_reference_files`（`paths`、`scopeId`、可选 `category`）。一次最多 150 个路径，仅接受当前项目内已有的普通文件，符号链接目标也必须在项目内；不扫描目录，不读取内容。重复路径跳过，不覆盖其原分类。`set_reference_category` 只更新当前列表内指定路径的分类，空字符串清除分类。两者使用原子合并并保留其他对话的参考。
+
+本地 Agent 也可使用相同实现的 CLI（例如宿主尚未重新加载新增 MCP 工具时）：
+
+```sh
+python3 scripts/reference-files.py import --project /absolute/project \
+  --scope-id SCOPE_ID_FROM_READ_PROBE_CONTEXT --paths-json /tmp/exact-paths.json --category GoldSrc
+python3 scripts/reference-files.py categorize --project /absolute/project \
+  --scope-id SCOPE_ID_FROM_READ_PROBE_CONTEXT --paths-json /tmp/exact-paths.json --category Source
+```
+
+JSON 文件内容是用户指定文件的绝对路径数组。CLI 必须明确传项目目录和已核对的列表身份，不使用运行目录推断目标。只在用户要求导入或整理时执行；不监听目录、不自动采集。升级保持原状态目录和插件 ID，既有条目无需迁移。加载新版后台及面板前，旧版不会显示分类；请重启宿主后继续编辑参考，避免旧后台丢弃新增字段。
+
 ## 数据与权限
 
 为保留原型用户的数据，默认目录仍是 `~/Library/Application Support/codex-reference-panel/`，也可用 `REFERENCE_STATE_DIR` 指定其他目录：`lists/` 保存路径列表，`thumbnails/` 保存缩略图缓存，`diagnostics/` 保存本机诊断信息。删除列表项目不删除原文件，卸载插件也不会自动清理上述目录。
@@ -75,7 +94,8 @@ python3 scripts/mcp-config.py --project /absolute/path/to/project
 - 播放依赖宿主支持的编码，不能保证所有 MOV、MP4 或其他容器均可播放。
 - HTML 支持完整排版和内嵌图片的静态预览；脚本、外部资源和外部跳转禁用。
 - iCloud 文件需要已经下载到本机。尚未下载的文件会给出提示。
-- Agent 目前只能打开面板和读取列表，不能直接批量增删参考。
+- Agent 导入只接受当前项目内的明确文件路径；外部参考仍可通过选择器或拖放加入。没有模型批量删除工具。
+- 右侧面板的标签顺序由宿主控制；插件没有已确认的固定最左位置接口。
 - 未提供项目信息的宿主按对话保存；连对话 ID 也没有时共用一份列表。其他宿主尚未实际验证。
 - 本项目提供源码构建，没有 Developer ID 签名、公证或面向普通用户的一键安装包。
 
@@ -87,7 +107,7 @@ python3 -m unittest discover -s verification -p 'test_*.py' -v
 node verification/test_probe_ui.cjs
 ```
 
-目前包含 71 项 Python 检查和合成页面检查。测试使用临时数据；通过它们不代表真实 Finder 拖放、选择器或原生宿主播放已验收。
+目前包含 80 项 Python 检查和合成页面检查（含分类、筛选后的多选及并发合并）。测试使用临时数据；通过它们不代表真实 Finder 拖放、选择器或原生宿主播放已验收。
 
 可在本机运行相同页面与后台的浏览器验证环境：
 

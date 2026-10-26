@@ -38,6 +38,10 @@ def main():
         present = [video, *extra, pdf, poster, note, gbk, subtitles]
         paths = {str(path) for path in present + [moved]}
         references = [{'path': str(p), 'name': p.name, 'size': p.stat().st_size, 'exists': True} for p in present]
+        category_map = json.loads(os.environ.get('REFERENCE_FIXTURE_CATEGORIES', '{}'))
+        for reference in references:
+            if reference['name'] in category_map:
+                reference['category'] = category_map[reference['name']]
         references.append({'path': str(moved), 'name': moved.name, 'size': 1024, 'exists': True})
         meta = {'threadId': 'inline-browser-fixture'}
         probe.dispatch('tools/call', {'name': 'save_reference_list', 'arguments': {'references': references, 'baseRevision': 0}, '_meta': meta})
@@ -58,7 +62,7 @@ if(m.method==='ui/initialize')result={hostInfo:{name:'local-fixture',version:'1'
 else if(m.method==='tools/call'){const response=await fetch('TOKEN/rpc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(m.params)});result=await response.json();if(result.error)throw Error(result.error);}
 else result={};frame.contentWindow.postMessage({jsonrpc:'2.0',id:m.id,result},location.origin);
 }catch(error){frame.contentWindow.postMessage({jsonrpc:'2.0',id:m.id,error:{message:error.message}},location.origin);}});</script>'''
-        page = page.replace('TOKEN', token).replace('HOST', json.dumps(host_context)).replace('WIDTH', '440')
+        page = page.replace('TOKEN', token).replace('HOST', json.dumps(host_context)).replace('WIDTH', os.environ.get('REFERENCE_FIXTURE_WIDTH', '440'))
 
         class Handler(BaseHTTPRequestHandler):
             def log_message(self, *_):

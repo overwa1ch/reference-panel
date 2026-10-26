@@ -476,5 +476,51 @@ function boot({failFirstRead=false, list=[], theme={theme:'light'}, thumbnails=f
   await fallback.pollShelf(); await settle();
   assert.match(fallback.$('scope-label').textContent,/已恢复项目 · 项目共享/);
 
-  console.log('PASS synthetic UI: list scope, thumbnails/grid/list, theme tokens, restore/conflict merge, drag/add, picker, PDF paging, menu keyboard, focus survival, video/text, stale responses, large assembly/cancel, remove/undo, multi-select, host requests, missing/relink');
+  // ---- Categories persist, filter selection safely, and merge across panels.
+  const grouped=[
+    {path:'/fixture/Gold-face.png',name:'Gold face.png',category:'GoldSrc'},
+    {path:'/fixture/Gold-body.png',name:'Gold body.png',category:'GoldSrc'},
+    {path:'/fixture/Source-face.png',name:'Source face.png',category:'Source'},
+    {path:'/fixture/video.mp4',name:'video.mp4'}];
+  const c=boot({list:grouped}); await settle();
+  const filter=(label)=>c.$('category-tabs').children.find(b=>b.title===label);
+  await filter('GoldSrc').click();
+  assert.equal(c.rows().length,2);
+  await c.$('file-list').dispatch('keydown',{key:'a',metaKey:true});
+  assert.equal(c.$('bulk-count').textContent,'已选 2 项','select-all includes only visible category');
+  await c.$('bulk-category').click();
+  c.$('category-input').value='角色参考';
+  await c.$('category-apply').click(); await settle();
+  assert.equal(c.server.references.filter(f=>f.category==='角色参考').length,2);
+  assert.equal(c.server.references.find(f=>f.path.includes('Source')).category,'Source');
+  const reopened=boot({serverState:c.server}); await settle();
+  assert.ok(reopened.$('category-tabs').children.some(b=>b.title==='角色参考'),'category survives reopening');
+  await filter('Source').click();
+  c.$('reference-search').value='missing'; await c.$('reference-search').dispatch('input');
+  assert.equal(c.rows().length,0); assert.equal(c.$('filter-empty').hidden,false);
+  c.$('reference-search').value='face'; await c.$('reference-search').dispatch('input');
+  assert.equal(c.rows().length,1);
+  await c.rows()[0].children[1].click();
+  await c.$('file-menu').querySelectorAll('button').find(b=>b.textContent==='设置分类…').click();
+  await c.$('category-clear').click(); await settle();
+  assert.equal(c.server.references.find(f=>f.path.includes('Source')).category,'');
+  c.$('reference-search').value=''; await c.$('reference-search').dispatch('input');
+  await filter('角色参考').click();
+  c.pickerFiles=[{path:'/fixture/new.txt',name:'new.txt'}];
+  await c.$('choose').click(); await settle();
+  assert.equal(c.server.references.find(f=>f.path==='/fixture/new.txt').category,'角色参考','new files inherit active category');
+  c.rows()[0].children[0].focus();
+  await c.$('file-list').dispatch('keydown',{key:'a',metaKey:true});
+  await c.$('bulk-category').click();
+  // Another panel imports a file after this panel's last read.
+  c.server.references.push({path:'/fixture/other.txt',category:'Other'}); c.server.revision++;
+  c.$('category-input').value='Renamed'; await c.$('category-apply').click(); await settle();
+  assert.ok(c.server.references.some(f=>f.path==='/fixture/other.txt'),'category conflict merge keeps external additions');
+  assert.equal(c.server.references.filter(f=>f.category==='Renamed').length,3);
+  c.server.scopeId='new-project'; c.server.references=[]; c.server.revision=0;
+  await c.$('refresh').click(); await settle();
+  assert.equal(c.$('category-editor').hidden,true);
+  assert.equal(c.$('reference-search').value,'');
+
+  console.log('PASS synthetic UI: list scope, categories/search/bulk/conflict/reopen, thumbnails/grid/list, theme tokens, restore/conflict merge, drag/add, picker, PDF paging, menu keyboard, focus survival, video/text, stale responses, large assembly/cancel, remove/undo, multi-select, host requests, missing/relink');
 })().catch(e=>{console.error(e);process.exitCode=1;});
