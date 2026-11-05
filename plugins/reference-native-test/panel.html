@@ -386,7 +386,7 @@
 </main>
 <div class="drop-overlay" aria-hidden="true"><div class="drop-card"><span class="drop-icon"><svg viewBox="0 0 16 16"><use href="#icon-plus"/></svg></span><strong id="drop-title">松开添加参考</strong><span>仅保存路径，不复制原文件</span></div></div>
 <details class="diagnostics">
-  <summary><svg class="chevron" aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-next"/></svg>诊断信息<span class="version">0.9.1</span></summary>
+  <summary><svg class="chevron" aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-next"/></svg>诊断信息<span class="version">0.9.2</span></summary>
   <div class="diagnostic-body">
     <div id="bridge" class="status">正在连接…</div>
     <div class="row"><button id="refresh" class="pill" type="button" disabled>刷新</button><button id="save" class="pill" type="button" disabled>保存记录</button><button id="copy" class="pill" type="button">复制诊断</button></div>
@@ -406,7 +406,7 @@
 (() => {
   'use strict';
   const $ = id => document.getElementById(id);
-  const VERSION = '0.9.1';
+  const VERSION = '0.9.2';
   const state = { schema: 3, version: VERSION, panelInstance: crypto.randomUUID(), openedAt: new Date().toISOString(), host: {}, toolContext: null, drops: [], selections: [], references: [], events: [] };
   const pending = new Map(); let rpcId = 0, ready = false, picking = false, resolving = false, actionBusy = false;
   // List persistence: local edits are ops replayed onto the server's latest list.
@@ -763,7 +763,7 @@
     $('empty-text').textContent=restoreError && empty ? restoreError : '拖入视频、图片或文档，或点「添加」多选\n'+scopeText+'，仅保存路径';
     $('file-count').title=scopeText;
     $('scope-label').hidden=listScope!=='project' && projectLookup!=='failed';
-    $('scope-label').textContent=listScope==='project'?(project?.name || '当前项目')+' · 项目共享':'项目识别失败 · 暂按对话保存';
+    $('scope-label').textContent=listScope==='project'?(project?.name || '当前项目')+(projectLookup==='cached'?' · 上次确认的项目':' · 项目共享'):'项目识别失败 · 暂按对话保存';
     $('scope-label').title=project?.root || (projectLookup==='failed'?'尚未取得项目目录，当前参考没有在项目内共享':'');
     $('empty-retry').hidden=!(restoreError && empty); $('empty-add').hidden=Boolean(restoreError);
     const list=$('file-list');

@@ -98,6 +98,7 @@ class ProjectScopes:
         self.lock = threading.Lock()
 
     def resolve(self, meta):
+        observed_at = time.time_ns()
         meta = meta if isinstance(meta, dict) else {}
         thread = meta.get('threadId') or meta.get('thread_id')
         thread = thread if isinstance(thread, str) and thread and len(thread) <= 256 else None
@@ -128,6 +129,8 @@ class ProjectScopes:
                 else:
                     try:
                         found = codex_thread_project(thread)
+                        if found:
+                            found = {**found, 'observedAtNs': time.time_ns()}
                     except (OSError, ValueError, TimeoutError, queue.Empty):
                         found = None
                     # Preserve an already-resolved scope across a transient API
@@ -139,10 +142,11 @@ class ProjectScopes:
                         self.cache.pop(next(iter(self.cache)))
                 if found:
                     root, source = found['root'], found['source']
+                    observed_at = found.get('observedAtNs', 0)
         owner = 'project:path:' + root if root else 'project:id:' + project_id if project_id else thread or 'shared:no-conversation-id'
         return {'owner': owner, 'scopeId': hashlib.sha256(owner.encode()).hexdigest(),
                 'listScope': 'project' if root or project_id else 'conversation' if thread else 'shared',
                 'projectLookup': 'resolved' if root or project_id else 'failed' if thread and codex else 'not-provided',
                 'project': {'root': root, 'name': (Path(root).name or root) if root else project_id,
                             'source': source or 'host-metadata'} if root or project_id else None,
-                'thread': thread}
+                'thread': thread, 'observedAtNs': observed_at}

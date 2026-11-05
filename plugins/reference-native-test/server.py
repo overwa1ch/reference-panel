@@ -18,8 +18,8 @@ import threading
 import time
 import uuid
 
-VERSION = "0.9.1"
-URI = "ui://reference-test/panel-0.9.1.html"
+VERSION = "0.9.2"
+URI = "ui://reference-test/panel-0.9.2.html"
 MIME = "text/html;profile=mcp-app"
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
@@ -327,6 +327,11 @@ def clean_references(references):
     return cleaned
 
 
+def reference_path_hashes(path):
+    # Preserve lexical tombstones while also matching aliases such as /var on macOS.
+    return {hashlib.sha256(value.encode()).hexdigest() for value in (path, os.path.realpath(path))}
+
+
 def with_status(references):
     """Re-check each original so moved or deleted files show at once."""
     output = []
@@ -357,6 +362,113 @@ class ReferenceStore:
     @staticmethod
     def path(owner):
         return LIST_DIR / (hashlib.sha256(owner.encode()).hexdigest() + ".json")
+
+    @staticmethod
+    def atomic_json(target, payload):
+        temporary = target.with_name(target.name + f".{os.getpid()}.{uuid.uuid4().hex}.tmp")
+        try:
+            with os.fdopen(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w", encoding="utf-8") as output:
+                json.dump(payload, output, ensure_ascii=False)
+                output.flush()
+                os.fsync(output.fileno())
+            os.replace(temporary, target)
+        finally:
+            if temporary.exists():
+                temporary.unlink()
+
+    def project_binding(self, thread):
+        target = LIST_DIR / "thread-projects" / self.path(thread).name
+        try:
+            binding = json.loads(target.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return None
+        except (OSError, ValueError):
+            raise ToolError("参考项目关联无法读取，原列表已保留", "store") from None
+        if not isinstance(binding, dict):
+            raise ToolError("参考项目关联格式无效，原列表已保留", "store")
+        owner, project = binding.get("owner"), binding.get("project")
+        if (not isinstance(owner, str) or not owner.startswith(("project:path:", "project:id:"))
+                or not isinstance(project, dict) or type(binding.get("observedAtNs")) is not int
+                or binding.get("scopeId") != self.path(owner).stem
+                or (owner.startswith("project:path:") and project.get("root") != owner[len("project:path:"):])):
+            raise ToolError("参考项目关联格式无效，原列表已保留", "store")
+        return binding
+
+    @staticmethod
+    def relocated_reference(item, old_root, new_root):
+        """Only rebase an absent file to its exact relative location; never scan."""
+        if not old_root or not new_root:
+            return item
+        path = Path(item["path"])
+        try:
+            path.stat()
+            return item  # External references and still-valid originals stay put.
+        except (FileNotFoundError, NotADirectoryError):
+            pass
+        except OSError:
+            return item
+        try:
+            relative = path.resolve().relative_to(old_root)
+            candidate = Path(new_root) / relative
+            candidate.resolve(strict=True).relative_to(Path(new_root).resolve(strict=True))
+            info = candidate.stat()
+            if not stat.S_ISREG(info.st_mode) or ("size" in item and item["size"] != info.st_size):
+                return item
+        except (OSError, ValueError, RuntimeError):
+            return item  # Keep missing entries visible for manual relinking.
+        return {**item, "path": str(candidate), "exists": True, "isFile": True,
+                "size": info.st_size, "lastModified": info.st_mtime_ns // 1000000}
+
+    def follow_project(self, scope):
+        """Persist the last project per chat and merge only observed transitions."""
+        thread = scope["thread"]
+        if not thread:
+            return scope
+        if scope["listScope"] != "project" and not self.project_binding(thread):
+            return scope  # Unscoped read-only hosts must not create state.
+        LIST_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
+        with self.lock, open(LIST_DIR / ".lock", "a") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            previous = self.project_binding(thread)
+            # A failed lookup after a backend restart must not hide a known shelf.
+            # Another backend may still have the old directory in its 60s cache.
+            stale = (previous and scope["owner"] != previous["owner"]
+                     and (scope["project"] or {}).get("source") == "codex-thread"
+                     and scope["observedAtNs"] < previous["observedAtNs"])
+            if previous and (scope["projectLookup"] == "failed" or stale):
+                return {**scope, **previous, "listScope": "project", "projectLookup": "cached"}
+            if scope["listScope"] != "project":
+                return scope
+            if previous and previous["owner"] == scope["owner"]:
+                return scope
+            if previous:
+                old = self.document(previous["owner"])
+                current = self.document(scope["owner"])
+                existing = clean_references(current["references"])
+                removed = set(current.get("removedPathHashes", []))
+                candidates = []
+                seen = {os.path.realpath(item["path"]) for item in existing}
+                for item in clean_references(old["references"]):
+                    relocated = self.relocated_reference(item, previous["project"].get("root"), scope["project"].get("root"))
+                    # Respect removals under both the old and rebased paths.
+                    canonical = os.path.realpath(relocated["path"])
+                    if canonical not in seen and not any(reference_path_hashes(entry["path"]) & removed for entry in (item, relocated)):
+                        candidates.append(relocated)
+                        seen.add(canonical)
+                references = clean_references(existing + candidates)
+                if len(references) > MAX_REFERENCES:
+                    raise ToolError(f"迁移后超过 {MAX_REFERENCES} 个参考，原列表已保留", "too-many")
+                present = set().union(*(reference_path_hashes(item["path"]) for item in references))
+                tombstones = sorted((removed | set(old.get("removedPathHashes", []))) - present)
+                if references != existing or tombstones != current.get("removedPathHashes", []):
+                    current["removedPathHashes"] = tombstones
+                    self.write(scope["owner"], references, current)
+            # Commit destination first. A crash before this checkpoint can retry
+            # the additive merge without losing entries or overwriting categories.
+            target = LIST_DIR / "thread-projects" / self.path(thread).name
+            target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            self.atomic_json(target, {key: scope[key] for key in ("owner", "scopeId", "project", "observedAtNs")})
+        return scope
 
     def document(self, owner):
         try:
@@ -391,10 +503,7 @@ class ReferenceStore:
                    "removedPathHashes": document.get("removedPathHashes", []),
                    "legacyRevisions": document.get("legacyRevisions", {})}
         target = self.path(owner)
-        temporary = target.with_name(target.name + f".{os.getpid()}.tmp")
-        with os.fdopen(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w", encoding="utf-8") as output:
-            json.dump(payload, output, ensure_ascii=False)
-        os.replace(temporary, target)
+        self.atomic_json(target, payload)
         return payload["revision"]
 
     def migrate(self, owner, thread):
@@ -430,7 +539,7 @@ class ReferenceStore:
                 return current["revision"], clean_references(current["references"])
             if marker not in current.get("migratedThreads", []) or current.get("legacyRevisions", {}).get(marker, -1) < old_revision:
                 removed = set(current.get("removedPathHashes", []))
-                candidates = [item for item in old if hashlib.sha256(item["path"].encode()).hexdigest() not in removed]
+                candidates = [item for item in old if not reference_path_hashes(item["path"]) & removed]
                 references = clean_references(current["references"] + candidates)
                 if len(references) > MAX_REFERENCES:
                     raise ToolError(f"合并后超过 {MAX_REFERENCES} 个参考，原列表已保留", "too-many")
@@ -467,8 +576,8 @@ class ReferenceStore:
                 if "category" not in item and item["path"] in categories:
                     item["category"] = categories[item["path"]]
             if owner.startswith("project:"):
-                before = {hashlib.sha256(item["path"].encode()).hexdigest() for item in current}
-                after = {hashlib.sha256(item["path"].encode()).hexdigest() for item in references}
+                before = set().union(*(reference_path_hashes(item["path"]) for item in current))
+                after = set().union(*(reference_path_hashes(item["path"]) for item in references))
                 document["removedPathHashes"] = sorted((set(document.get("removedPathHashes", [])) | (before - after)) - after)
             revision = self.write(owner, references, document)
             return {"status": "saved", "revision": revision, "references": references}
@@ -502,7 +611,7 @@ class ReferenceStore:
                 raise ToolError(f"参考列表最多保存 {MAX_REFERENCES} 项", "too-many")
             revision = document["revision"]
             if added or changed:
-                present = {hashlib.sha256(f["path"].encode()).hexdigest() for f in current}
+                present = set().union(*(reference_path_hashes(f["path"]) for f in current))
                 document["removedPathHashes"] = sorted(set(document.get("removedPathHashes", [])) - present)
                 revision = self.write(owner, current, document)
             return {"status": "saved", "revision": revision, "references": current,
@@ -631,7 +740,7 @@ def drag_owner(meta):
 
 
 def list_owner(meta):
-    scope = PROJECTS.resolve(meta)
+    scope = STORE.follow_project(PROJECTS.resolve(meta))
     if scope["listScope"] == "project":
         STORE.migrate(scope["owner"], scope["thread"])
     return scope["owner"]
@@ -831,7 +940,7 @@ def call_tool(name, args, meta):
     data = context(meta)
     scoped = name in {"import_reference_files", "set_reference_category", "open_reference_probe", "read_probe_context", "save_reference_list", "prepare_reference_preview",
                       "read_reference_thumbnails", "read_reference_preview_chunk", "release_reference_preview"}
-    scope = PROJECTS.resolve(meta) if scoped else None
+    scope = STORE.follow_project(PROJECTS.resolve(meta)) if scoped else None
     owner = scope["owner"] if scope else drag_owner(meta) or SHARED_OWNER
     if scope and scope["listScope"] == "project" and name not in {"read_reference_preview_chunk", "release_reference_preview"}:
         STORE.migrate(owner, scope["thread"])

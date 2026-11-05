@@ -294,12 +294,196 @@ class ProjectSharingTests(unittest.TestCase):
         with patch.dict(os.environ, {'REFERENCE_PROJECT_ROOT': str(self.root)}):
             self.assertEqual(resolver.resolve({})['scopeId'], self.read()['scopeId'])
 
-    def test_moving_a_chat_does_not_import_its_old_list_into_another_project(self):
+    def test_moving_a_chat_carries_current_project_not_stale_legacy_list(self):
         probe.STORE.save('A', [{'path': str(self.file)}], 0)
-        self.assertEqual(len(self.read()['references']), 1)
+        first = self.read()
+        self.save([{'path': str(self.folder / 'current.txt'), 'category': 'Current'}], first)
         moved = self.read(root=self.folder / 'Project B')
-        self.assertEqual(moved['references'], [])
+        self.assertEqual([(item['path'], item['category']) for item in moved['references']],
+                         [(str(self.folder / 'current.txt'), 'Current')])
         self.assertEqual(len(self.read('B')['references']), 1)
+
+    def test_move_merges_existing_destination_and_survives_restart(self):
+        target = self.folder / 'Project B'
+        initial = self.read()
+        self.save([{'path': str(self.file), 'category': 'Source'}, {'path': '/external/movie.mp4', 'category': 'Video'}], initial)
+        dest = self.read('B', target)
+        self.save([{'path': str(self.file), 'category': 'Destination'}, {'path': '/external/note.txt'}], dest, 'B', target)
+        source_path = probe.LIST_DIR / (initial['scopeId'] + '.json')
+        original = source_path.read_bytes()
+        with patch.object(probe, 'STORE', probe.ReferenceStore()), patch.object(probe, 'PROJECTS', probe.ProjectScopes()):
+            moved = self.read(root=target)
+            self.assertEqual(len(moved['references']), 3)
+            self.assertEqual(moved['references'][0]['category'], 'Destination')
+            self.assertEqual(moved['references'][2]['category'], 'Video')
+            self.assertEqual(self.read(root=target)['listRevision'], moved['listRevision'])
+        self.assertEqual(source_path.read_bytes(), original)
+
+    def test_migration_deduplicates_aliases_without_overwriting_target_category(self):
+        self.save([{'path': str(self.file), 'category': 'Source'}], self.read())
+        target = self.folder / 'Project B'
+        self.save([{'path': str(self.file.resolve()), 'category': 'Kept'}], self.read('B', target), 'B', target)
+        moved = self.read(root=target)['references']
+        self.assertEqual(len(moved), 1)
+        self.assertEqual(moved[0]['category'], 'Kept')
+
+    def test_removed_references_stay_removed_across_repeated_moves_and_chats(self):
+        target = self.folder / 'Project B'
+        self.save([{'path': str(self.file)}], self.read())
+        # A second chat knows the source project and may move later.
+        self.read('B')
+        moved = self.read(root=target)
+        self.save([], moved, root=target)
+        self.read()  # return to the original project
+        self.assertEqual(self.read(root=target)['references'], [])
+        with patch.object(probe, 'STORE', probe.ReferenceStore()):
+            self.assertEqual(self.read('B', target)['references'], [])
+        # An explicit re-add still works.
+        self.save([{'path': str(self.file)}], self.read(root=target), root=target)
+        self.assertEqual(len(self.read(root=target)['references']), 1)
+
+    def test_move_carries_removal_protection_against_later_legacy_imports(self):
+        self.save([{'path': str(self.file)}], self.read())
+        self.save([], self.read())
+        target = self.folder / 'Project B'
+        self.assertEqual(self.read(root=target)['references'], [])
+        probe.STORE.save('Legacy', [{'path': str(self.file)}], 0)
+        self.assertEqual(self.read('Legacy', target)['references'], [])
+
+    def test_actual_directory_move_relinks_only_exact_relative_files(self):
+        video = self.root / 'clips/clip.mp4'
+        video.parent.mkdir()
+        video.write_bytes(b'video')
+        references = [{'path': str(video), 'size': 5, 'category': 'Footage'}, {'path': str(self.file)}]
+        self.save(references, self.read())
+        target = self.folder / 'Renamed project'
+        self.root.rename(target)
+        moved = self.read(root=target)['references']
+        self.assertEqual(moved[0]['path'], str(target.resolve() / 'clips/clip.mp4'))
+        self.assertTrue(moved[0]['exists'])
+        self.assertEqual(moved[0]['category'], 'Footage')
+        self.assertEqual(moved[1]['path'], str(self.file))
+        self.assertEqual((target / 'clips/clip.mp4').read_bytes(), b'video')
+
+    def test_relink_does_not_guess_different_files_or_follow_escaping_symlinks(self):
+        target = self.folder / 'Project B'
+        target.mkdir()
+        (target / 'changed.mp4').write_bytes(b'different size')
+        (target / 'link.mp4').symlink_to(self.file)
+        refs = [{'path': str(self.root / name), 'size': 5} for name in ('changed.mp4', 'link.mp4', 'missing.mp4')]
+        self.save(refs, self.read())
+        moved = self.read(root=target)['references']
+        self.assertEqual([item['path'] for item in moved], [item['path'] for item in refs])
+        self.assertTrue(all(item['exists'] is False for item in moved))
+
+    def test_relinked_path_removal_is_respected_on_later_move(self):
+        target = self.folder / 'Project B'
+        target.mkdir()
+        new_file = target / 'clip.mp4'
+        new_file.write_bytes(b'video')
+        self.save([{'path': str(self.root / 'clip.mp4'), 'size': 5}], self.read())
+        dest = self.read('B', target)
+        self.save([{'path': str(new_file)}], dest, 'B', target)
+        self.save([], self.read('B', target), 'B', target)
+        self.assertEqual(self.read(root=target)['references'], [])
+
+    def test_overflow_preserves_both_lists_and_can_retry(self):
+        target = self.folder / 'Project B'
+        self.save([{'path': str(self.file)}], self.read())
+        self.save([{'path': '/external/other.txt'}], self.read('B', target), 'B', target)
+        original = {p: p.read_bytes() for p in probe.LIST_DIR.rglob('*.json')}
+        with patch.object(probe, 'MAX_REFERENCES', 1):
+            failed = self.call('read_probe_context', root=target)
+        self.assertEqual(failed['structuredContent']['error']['code'], 'too-many')
+        self.assertTrue(all(p.read_bytes() == data for p, data in original.items()))
+        self.assertEqual(len(self.read(root=target)['references']), 2)
+
+    def test_crash_after_merge_before_checkpoint_retries_without_duplicates(self):
+        self.save([{'path': str(self.file), 'category': 'Video'}], self.read())
+        target = self.folder / 'Project B'
+        atomic = probe.STORE.atomic_json
+        def interrupted(path, payload):
+            if path.parent.name == 'thread-projects':
+                raise OSError('simulated crash before checkpoint')
+            return atomic(path, payload)
+        with patch.object(probe.STORE, 'atomic_json', side_effect=interrupted):
+            with self.assertRaisesRegex(OSError, 'simulated crash'):
+                self.read(root=target)
+        with patch.object(probe, 'STORE', probe.ReferenceStore()):
+            moved = self.read(root=target)
+        self.assertEqual(len(moved['references']), 1)
+        self.assertEqual(moved['listRevision'], 1)
+        self.assertEqual(moved['references'][0]['category'], 'Video')
+
+    def test_two_backends_merge_different_sources_atomically(self):
+        target = self.folder / 'Combined'
+        self.save([{'path': str(self.file)}], self.read())
+        other_root = self.folder / 'Other'
+        self.save([{'path': '/external/other.txt'}], self.read('B', other_root), 'B', other_root)
+        barrier = threading.Barrier(2)
+        def move(thread):
+            store = probe.ReferenceStore()
+            scope = probe.ProjectScopes().resolve({'projectRoot': str(target), 'threadId': thread})
+            barrier.wait(timeout=3)
+            store.follow_project(scope)
+            return store.load(scope['owner'])
+        with probe.ThreadPoolExecutor(max_workers=2) as pool:
+            jobs = [pool.submit(move, thread) for thread in ('A', 'B')]
+            for job in jobs:
+                job.result(timeout=5)
+        self.assertEqual(len(self.read(root=target)['references']), 2)
+
+    def test_failed_lookup_after_restart_keeps_last_known_project(self):
+        self.save([{'path': str(self.file)}], self.read())
+        module = probe.sys.modules['project_scope']
+        with patch.object(probe, 'PROJECTS', probe.ProjectScopes()), patch.object(module, 'codex_thread_project', return_value=None):
+            result = probe.dispatch('tools/call', {'name': 'read_probe_context', '_meta': {'threadId': 'A', 'plugin_id': 'reference-panel'}})['structuredContent']
+        self.assertEqual(result['project']['root'], str(self.root.resolve()))
+        self.assertEqual(len(result['references']), 1)
+
+    def test_old_backend_directory_cache_cannot_reverse_a_newer_move(self):
+        module = probe.sys.modules['project_scope']
+        meta = {'threadId': 'A', 'plugin_id': 'reference-panel'}
+        old_resolver = probe.ProjectScopes()
+        with patch.object(module, 'codex_thread_project', return_value={'root': str(self.root), 'source': 'codex-thread'}):
+            scope = old_resolver.resolve(meta)
+        probe.STORE.follow_project(scope)
+        self.save([{'path': str(self.file)}], self.read())
+        target = self.folder / 'Project B'
+        moved = self.read(root=target)
+        with patch.object(probe, 'PROJECTS', old_resolver):
+            result = probe.dispatch('tools/call', {'name': 'read_probe_context', '_meta': meta})['structuredContent']
+        self.assertEqual(result['scopeId'], moved['scopeId'])
+        self.assertEqual(len(result['references']), 1)
+
+    def test_corrupt_binding_fails_without_replacing_the_original_list(self):
+        self.save([{'path': str(self.file)}], self.read())
+        path = probe.LIST_DIR / 'thread-projects' / probe.STORE.path('A').name
+        self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
+        path.write_text('{broken')
+        failed = self.call('read_probe_context', root=self.folder / 'Project B')
+        self.assertEqual(failed['structuredContent']['error']['code'], 'store')
+        owner = probe.PROJECTS.resolve({'projectRoot': str(self.root)})['owner']
+        self.assertEqual(len(probe.STORE.load(owner)[1]), 1)
+
+    def test_stdio_move_with_fresh_processes_and_real_persisted_state(self):
+        env = {key: value for key, value in os.environ.items() if key not in ('REFERENCE_PROJECT_ROOT', 'REFERENCE_PROBE_LOG')}
+        env['REFERENCE_STATE_DIR'] = str(self.folder / 'stdio-state')
+        def call(name, root, arguments=None):
+            request = {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {
+                'name': name, 'arguments': arguments or {}, '_meta': {'threadId': 'fixture', 'projectRoot': str(root)}}}
+            run = subprocess.run([probe.sys.executable, str(ROOT / 'server.py')], input=json.dumps(request) + '\n',
+                                 text=True, capture_output=True, check=True, timeout=10, env=env)
+            result = json.loads(run.stdout)['result']
+            self.assertNotIn('isError', result)
+            return result['structuredContent']
+        first = call('read_probe_context', self.root)
+        call('save_reference_list', self.root, {'references': [{'path': str(self.file), 'category': 'Footage'}],
+                                              'baseRevision': first['listRevision'], 'scopeId': first['scopeId']})
+        moved = call('read_probe_context', self.folder / 'Project B')
+        self.assertEqual(moved['probeContext']['serverVersion'], '0.9.2')
+        self.assertNotEqual(moved['scopeId'], first['scopeId'])
+        self.assertEqual([(item['path'], item['category']) for item in moved['references']], [(str(self.file), 'Footage')])
 
     def test_later_legacy_chats_do_not_bring_back_removed_paths(self):
         other = self.folder / 'other.txt'
