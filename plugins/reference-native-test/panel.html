@@ -197,21 +197,31 @@
   .grid .missing-badge { position: absolute; left: 6px; bottom: 6px; display: flex; align-items: center; gap: 3px; padding: 0 6px; border-radius: 4px; background: var(--danger-bg); color: var(--danger); font-size: 10.5px; line-height: 18px; }
   .grid .missing-badge svg { width: 11px; height: 11px; }
 
-  /* List view */
-  .file-list.list { margin-inline: -8px; }
-  .list .file-row { display: flex; align-items: center; min-height: 52px; border-radius: var(--r-sm); }
-  .list .file-row + .file-row { margin-top: 1px; }
-  .list .file-row:hover { background: var(--hover); }
-  .list .file-row[data-current="true"] { background: var(--pressed); }
-  .list .file-row.selected, .list .file-row.selected:hover { background: var(--selected); }
-  .list .preview-file { flex: 1; align-items: center; gap: 11px; padding: 6px 4px 6px 8px; }
-  .list .thumb { width: 48px; height: 36px; border-radius: var(--r-xs); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 6%, transparent); }
-  .list .thumb .duration { display: none; }
-  .list .thumb.page > img { max-width: 70%; max-height: 78%; box-shadow: 0 0 0 1px rgb(0 0 0 / .06), 0 1px 3px -1px rgb(0 0 0 / .25); }
-  .list .file-row[data-current="true"] .thumb { box-shadow: 0 0 0 2px var(--ring); }
-  .list .more-button { width: 28px; height: 28px; margin-right: 6px; border-radius: var(--r-xs); background: transparent; }
-  .list .more-button:hover, .list .more-button[aria-expanded="true"] { background: var(--pressed); color: var(--text); }
-  .list .missing-badge { display: none; }
+  /* Compact category tree */
+  .file-list.tree { margin: 4px 0 0; }
+  .tree-branch { list-style: none; margin: 0; padding: 0; }
+  .tree-children { list-style: none; margin: 0 0 3px 10px; padding: 0 0 0 9px; border-left: 1px solid var(--line-soft); }
+  .tree-toggle { width: 100%; height: 28px; display: flex; align-items: center; gap: 6px; padding: 0 6px; border: 0; border-radius: 5px; background: transparent; text-align: left; font-size: 12px; }
+  .tree-toggle:hover { background: var(--hover); }
+  .tree-toggle .tree-chevron { width: 12px; height: 12px; transition: transform .12s; }
+  .tree-toggle[aria-expanded="true"] .tree-chevron { transform: rotate(90deg); }
+  .tree-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: var(--fw-semibold); }
+  .tree-count { margin-left: auto; color: var(--subtle); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .tree .file-row { display: flex; align-items: center; height: 28px; border-radius: 4px; }
+  .tree .file-row:hover { background: var(--hover); }
+  .tree .file-row[data-current="true"] { background: var(--pressed); }
+  .tree .file-row.selected, .tree .file-row.selected:hover { background: var(--selected); }
+  .tree .preview-file { flex: 1; height: 28px; align-items: center; gap: 7px; padding: 0 4px; overflow: hidden; }
+  .tree .thumb { width: 16px; height: 16px; border-radius: 0; background: transparent; box-shadow: none; }
+  .tree .thumb svg { width: 15px; height: 15px; }
+  .tree .file-name { font-size: 12px; font-weight: 400; line-height: 28px; }
+  .tree .file-meta, .tree .category-badge, .tree .missing-badge, .tree .duration { display: none; }
+  .tree .more-button { width: 24px; height: 24px; margin-right: 2px; border-radius: 4px; background: transparent; }
+  .tree .more-button:hover, .tree .more-button[aria-expanded="true"] { background: var(--pressed); color: var(--text); }
+  .selection-area { min-height: 100px; padding: 0 6px 36px; margin: 0 -6px; user-select: none; -webkit-user-select: none; }
+  .selection-help { margin: 4px 0; color: var(--subtle); font-size: 11px; }
+  .selection-box { position: fixed; z-index: 25; pointer-events: none; border: 1px solid var(--ring); background: color-mix(in srgb, var(--ring) 15%, transparent); border-radius: 2px; }
+  body.selecting, body.selecting * { cursor: crosshair !important; user-select: none !important; -webkit-user-select: none !important; }
 
   /* Empty state */
   .empty-state { margin-top: 16px; display: flex; flex-direction: column; align-items: center; text-align: center; padding: 34px 20px 30px; border-radius: var(--r-lg); border: 1.5px dashed var(--line); background: var(--wash); }
@@ -275,7 +285,7 @@
   .raw summary { cursor: pointer; }
 
   /* Expanded preview: the board takes the whole panel. */
-  body.expanded #empty-state, body.expanded #file-list, body.expanded .diagnostics { display: none !important; }
+  body.expanded #empty-state, body.expanded #selection-area, body.expanded #selection-help, body.expanded .diagnostics { display: none !important; }
   body.expanded .preview-stage, body.expanded .preview-stage[data-kind] { height: calc(100vh - var(--header) - 116px); max-height: none; aspect-ratio: auto; min-height: 200px; }
   body.expanded #preview-content img { max-height: none; }
   body.expanded .preview-stage[data-kind="image"] #preview-content img { max-height: calc(100vh - var(--header) - 116px); }
@@ -310,6 +320,7 @@
   <symbol id="icon-next" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
   <symbol id="icon-warning" viewBox="0 0 24 24"><path d="M12 4 2.8 19.5h18.4Z"/><path d="M12 10v4M12 17h.01"/></symbol>
   <symbol id="icon-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></symbol>
+  <symbol id="icon-tree" viewBox="0 0 24 24"><path d="M5 3v15M5 8h5M5 18h5"/><rect x="10" y="5" width="10" height="6" rx="1"/><rect x="10" y="15" width="10" height="6" rx="1"/></symbol>
   <symbol id="icon-list" viewBox="0 0 24 24"><rect x="4" y="5" width="5" height="4" rx="1"/><rect x="4" y="15" width="5" height="4" rx="1"/><path d="M12 7h8M12 17h8"/></symbol>
   <symbol id="icon-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
   <symbol id="icon-link" viewBox="0 0 16 16"><path d="m6 5-2 2a2.8 2.8 0 0 0 4 4l2-2M10 11l2-2a2.8 2.8 0 0 0-4-4L6 7"/></symbol>
@@ -318,7 +329,7 @@
   <div class="heading"><h1>参考</h1><span id="file-count" class="count" aria-live="polite"></span></div>
   <div class="toolbar-actions">
     <div id="bulk-bar" class="bulk-bar" hidden><span id="bulk-count" aria-live="polite"></span><button id="bulk-category" class="ghost" type="button">分类</button><button id="bulk-remove" class="ghost danger" type="button">移除</button><button id="bulk-clear" class="ghost" type="button">取消</button></div>
-    <div id="view-toggle" class="segmented" role="group" aria-label="显示方式"><button id="view-grid" type="button" title="缩略图" aria-label="缩略图" aria-pressed="true"><svg aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-grid"/></svg></button><button id="view-list" type="button" title="列表" aria-label="列表" aria-pressed="false"><svg aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-list"/></svg></button></div>
+    <div id="view-toggle" class="segmented" role="group" aria-label="显示方式"><button id="view-grid" type="button" title="缩略图" aria-label="缩略图" aria-pressed="true"><svg aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-grid"/></svg></button><button id="view-list" type="button" title="树状列表" aria-label="树状列表" aria-pressed="false"><svg aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-tree"/></svg></button></div>
     <button id="cancel-choose" class="ghost" type="button" hidden>取消选择</button>
     <button id="choose" class="add-button" type="button" title="选择文件，支持多选" disabled><svg aria-hidden="true" viewBox="0 0 16 16"><use href="#icon-plus"/></svg><span id="choose-label">添加</span></button>
   </div>
@@ -368,11 +379,14 @@
     <button id="empty-add" class="add-button" type="button" disabled><svg aria-hidden="true" viewBox="0 0 16 16"><use href="#icon-plus"/></svg>添加参考</button>
     <button id="empty-retry" class="pill" type="button" hidden>重试</button>
   </div>
-  <ul id="file-list" class="file-list grid" aria-label="参考文件列表" hidden></ul>
+  <p id="selection-help" class="selection-help" hidden>拖动框选 · ⌘ / Ctrl 可追加 · Esc 取消框选</p>
+  <div id="selection-area" class="selection-area" aria-describedby="selection-help" hidden>
+    <ul id="file-list" class="file-list grid" aria-label="参考文件列表" hidden></ul>
+  </div>
 </main>
 <div class="drop-overlay" aria-hidden="true"><div class="drop-card"><span class="drop-icon"><svg viewBox="0 0 16 16"><use href="#icon-plus"/></svg></span><strong id="drop-title">松开添加参考</strong><span>仅保存路径，不复制原文件</span></div></div>
 <details class="diagnostics">
-  <summary><svg class="chevron" aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-next"/></svg>诊断信息<span class="version">0.8.0</span></summary>
+  <summary><svg class="chevron" aria-hidden="true" viewBox="0 0 24 24"><use href="#icon-next"/></svg>诊断信息<span class="version">0.9.1</span></summary>
   <div class="diagnostic-body">
     <div id="bridge" class="status">正在连接…</div>
     <div class="row"><button id="refresh" class="pill" type="button" disabled>刷新</button><button id="save" class="pill" type="button" disabled>保存记录</button><button id="copy" class="pill" type="button">复制诊断</button></div>
@@ -386,12 +400,13 @@
     <details class="raw"><summary>工具元数据</summary><pre id="tool">{}</pre></details>
   </div>
 </details>
+<div id="selection-box" class="selection-box" aria-hidden="true" hidden></div>
 <div id="file-menu" class="file-menu" role="menu" aria-label="参考文件操作" hidden></div>
 <script>
 (() => {
   'use strict';
   const $ = id => document.getElementById(id);
-  const VERSION = '0.8.0';
+  const VERSION = '0.9.1';
   const state = { schema: 3, version: VERSION, panelInstance: crypto.randomUUID(), openedAt: new Date().toISOString(), host: {}, toolContext: null, drops: [], selections: [], references: [], events: [] };
   const pending = new Map(); let rpcId = 0, ready = false, picking = false, resolving = false, actionBusy = false;
   // List persistence: local edits are ops replayed onto the server's latest list.
@@ -401,13 +416,15 @@
   // Explicit multi-selection (Cmd/Shift click, Cmd+A); a plain click previews instead.
   let selected = new Set(), anchorPath = null, lastUndo = null, statusTimer = null, hostVariables = [];
   let previewSerial = 0, activePreview = null, activeLease = null, activeBlob = null, staleBlobs = [], previewTimer = null;
-  const rows = new Map();
+  const rows = new Map(), treeGroups = new Map();
+  let collapsedGroups = new Set(), searchCollapsed = new Set(), treeScope = null;
+  let marquee = null, marqueeFrame = null, suppressClickUntil = 0;
   // Quick Look thumbnails, keyed by path; fetched only for visible rows.
   const thumbs = new Map(); let thumbQueue = [], thumbBusy = false;
   const thumbObserver = typeof IntersectionObserver === 'function'
     ? new IntersectionObserver(entries => entries.forEach(entry => { if(entry.isIntersecting) requestThumb(entry.target.dataset.path); }), {rootMargin:'240px'}) : null;
   let view = 'grid';
-  try { if(['grid','list'].includes(localStorage.getItem('codex-reference-panel.view'))) view=localStorage.getItem('codex-reference-panel.view'); } catch { /* storage may be unavailable */ }
+  try { const saved=localStorage.getItem('codex-reference-panel.view'); if(['list','tree'].includes(saved)) view='tree'; } catch { /* storage may be unavailable */ }
   const stringify = value => JSON.stringify(value, null, 2);
   const errorText = error => error?.message || String(error);
   const KINDS = [
@@ -585,8 +602,55 @@
   // ----- Rendering -----
   const categoryOf = file => typeof file.category==='string' ? file.category : '';
   const categories = () => [...new Set(state.references.map(categoryOf).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
-  function visibleFiles() {
+  function filteredFiles() {
     return state.references.filter(f=>(categoryFilter===null || categoryOf(f)===categoryFilter) && nameOf(f).toLocaleLowerCase().includes(searchQuery));
+  }
+  function groupedFiles(files) {
+    const groups=new Map();
+    for(const f of files) { const c=categoryOf(f); if(!groups.has(c)) groups.set(c,[]); groups.get(c).push(f); }
+    return [...groups].sort(([a],[b])=>a && b?a.localeCompare(b):a?-1:b?1:0);
+  }
+  const groupOpen = category => !(searchQuery?searchCollapsed:collapsedGroups).has(category);
+  function visibleFiles() {
+    const files=filteredFiles();
+    return view==='tree'?groupedFiles(files).flatMap(([c,items])=>groupOpen(c)?items:[]):files;
+  }
+  function loadTreeScope(nextScope) {
+    if(treeScope===nextScope) return;
+    treeScope=nextScope; collapsedGroups=new Set(); searchCollapsed.clear();
+    try {
+      const saved=JSON.parse(localStorage.getItem('codex-reference-panel.tree.'+nextScope) || '[]');
+      if(Array.isArray(saved)) collapsedGroups=new Set(saved.filter(c=>typeof c==='string' && c.length<=80).slice(0,2000));
+    } catch { /* isolated or unavailable storage */ }
+  }
+  function toggleGroup(category, open=!groupOpen(category)) {
+    cancelMarquee();
+    const set=searchQuery?searchCollapsed:collapsedGroups;
+    open?set.delete(category):set.add(category);
+    if(!searchQuery) try { localStorage.setItem('codex-reference-panel.tree.'+treeScope,JSON.stringify([...collapsedGroups])); } catch { /* optional preference */ }
+    renderFiles(); treeGroups.get(category)?.toggle.focus();
+  }
+  function treeGroup(category, count) {
+    let group=treeGroups.get(category);
+    if(!group) {
+      const li=node('li','tree-branch'); li.setAttribute('role','treeitem'); li.setAttribute('aria-level','1');
+      const toggle=node('button','tree-toggle'); toggle.type='button'; toggle.dataset.category=category;
+      const chevron=icon('next'); chevron.classList.add('tree-chevron');
+      const label=node('span','tree-label',category || '未分类'), badge=node('span','tree-count');
+      toggle.append(chevron,icon('folder'),label,badge);
+      toggle.addEventListener('click',()=>toggleGroup(category));
+      const children=node('ul','tree-children'); children.setAttribute('role','group');
+      li.append(toggle,children); group={li,toggle,children,badge}; treeGroups.set(category,group);
+    }
+    const open=groupOpen(category);
+    group.li.setAttribute('aria-expanded',String(open)); group.li.setAttribute('aria-label',category || '未分类');
+    group.toggle.setAttribute('aria-expanded',String(open)); group.toggle.setAttribute('aria-label',(category || '未分类')+'，'+count+' 项');
+    group.badge.textContent=String(count); group.children.hidden=!open;
+    return group;
+  }
+  function placeChildren(parent, children) {
+    let cursor=parent.firstChild;
+    for(const child of children) { if(child!==cursor) parent.insertBefore(child,cursor); else cursor=cursor.nextSibling; }
   }
   function renderFilters() {
     $('shelf-filters').hidden=!state.references.length;
@@ -601,7 +665,7 @@
     for(const [value,label,count] of choices) {
       const b=node('button','pill',label+' '+count); b.type='button'; b.title=label;
       b.setAttribute('aria-pressed',String(value===categoryFilter));
-      b.addEventListener('click',()=>{ categoryFilter=value; selected.clear(); anchorPath=null; closeCategoryEditor(); closeMenu(); renderFiles(); });
+      b.addEventListener('click',()=>{ cancelMarquee(); categoryFilter=value; selected.clear(); anchorPath=null; closeCategoryEditor(); closeMenu(); renderFiles(); });
       tabs.append(b);
       if(restoreFocus && value===categoryFilter) b.focus();
     }
@@ -623,7 +687,7 @@
     commit({type:'category',paths,category:value.trim()});
     setStatus('已设置 '+paths.length+' 项分类');
   }
-  $('reference-search').addEventListener('input',()=>{ searchQuery=$('reference-search').value.trim().toLocaleLowerCase(); selected.clear(); anchorPath=null; closeCategoryEditor(); renderFiles(); });
+  $('reference-search').addEventListener('input',()=>{ cancelMarquee(); searchQuery=$('reference-search').value.trim().toLocaleLowerCase(); searchCollapsed.clear(); selected.clear(); anchorPath=null; closeCategoryEditor(); renderFiles(); });
   $('bulk-category').addEventListener('click',()=>editCategory([...selected]));
   $('category-apply').addEventListener('click',()=>saveCategory($('category-input').value));
   $('category-clear').addEventListener('click',()=>saveCategory(''));
@@ -661,15 +725,19 @@
     const name=nameOf(file), kind=fileKind(file), missing=isMissing(file);
     const current=activePreview?.file.path===file.path, chosen=selected.has(file.path);
     const thumb=thumbs.get(file.path);
-    const key=[name,kind,missing,file.size,file.exists,current,chosen,categoryOf(file),thumb?.state,thumb?.url,thumb?.duration].join('|');
+    const key=[view,name,kind,missing,file.size,file.exists,current,chosen,categoryOf(file),thumb?.state,thumb?.url,thumb?.duration].join('|');
     if(row.key===key) return;
     row.key=key;
     row.li.classList.toggle('missing',missing); row.li.classList.toggle('selected',chosen);
     row.li.dataset.current=String(current);
     if(current) row.preview.setAttribute('aria-current','true'); else row.preview.removeAttribute('aria-current');
-    paintThumb(row.mark,file,kind);
+    if(view==='tree') { row.mark.replaceChildren(icon(iconFor(kind))); row.mark.dataset.kind=kind; row.mark.classList.remove('page'); }
+    else paintThumb(row.mark,file,kind);
+    row.li.setAttribute('role',view==='tree'?'treeitem':'listitem');
+    if(view==='tree') { row.li.setAttribute('aria-level','2'); row.li.setAttribute('aria-selected',String(chosen)); }
+    else { row.li.removeAttribute('aria-level'); row.li.removeAttribute('aria-selected'); }
     if(missing) { const badge=node('span','missing-badge'); badge.append(icon('warning'),node('span','','已失效')); row.mark.append(badge); }
-    row.title.textContent=name; row.title.title=name;
+    row.title.textContent=name; row.title.title=file.path;
     row.category.textContent=categoryOf(file); row.category.hidden=!categoryOf(file);
     const ext=extOf(file).toUpperCase().slice(0,6);
     if(missing) row.meta.replaceChildren(icon('warning'),node('span','','文件已不在原位置'));
@@ -680,13 +748,15 @@
     row.more.setAttribute('aria-label',name+' 的更多操作');
   }
   function renderFiles() {
+    const focusBefore=$('file-list').contains(document.activeElement)?document.activeElement:null;
     renderFilters();
-    const files=visibleFiles();
+    const filtered=filteredFiles(), files=visibleFiles();
     const visiblePaths=new Set(files.map(f=>f.path)); selected=new Set([...selected].filter(p=>visiblePaths.has(p)));
     $('file-count').textContent=state.references.length ? String(state.references.length) : '';
     const empty=state.references.length===0;
-    $('empty-state').hidden=!empty; $('file-list').hidden=!files.length;
-    $('filter-empty').hidden=empty || files.length>0;
+    $('empty-state').hidden=!empty; $('file-list').hidden=!filtered.length;
+    $('selection-area').hidden=!filtered.length; $('selection-help').hidden=empty;
+    $('filter-empty').hidden=empty || filtered.length>0;
     $('empty-state').classList.toggle('error',Boolean(restoreError) && empty);
     $('empty-title').textContent=restoreError && empty ? '暂时无法读取参考列表' : '把参考放在手边';
     const scopeText=listScope==='project'?'同一项目的所有对话共用这份列表':listScope==='shared'?'所有对话共用这份列表':'列表跟随当前对话';
@@ -699,20 +769,39 @@
     const list=$('file-list');
     const wanted=new Set(files.map(f=>f.path));
     for(const [path,row] of rows) if(!wanted.has(path)) { thumbObserver?.unobserve(row.li); row.li.remove(); rows.delete(path); releaseThumb(path); }
-    list.classList.toggle('grid',view==='grid'); list.classList.toggle('list',view==='list');
-    // Reconcile in place: unchanged rows keep their nodes, so focus survives.
-    let cursor=list.firstChild;
-    for(const file of files) {
-      const row=rowParts(file); updateRow(row,file);
-      if(row.li!==cursor) list.insertBefore(row.li,cursor); else cursor=cursor.nextSibling;
+    list.classList.toggle('grid',view==='grid'); list.classList.toggle('tree',view==='tree');
+    list.setAttribute('role',view==='tree'?'tree':'list');
+    if(view==='tree') list.setAttribute('aria-multiselectable','true'); else list.removeAttribute('aria-multiselectable');
+    const rendered=file=>{ const row=rowParts(file); updateRow(row,file); return row.li; };
+    if(view==='tree') {
+      const groups=groupedFiles(filtered), names=new Set(groups.map(([c])=>c));
+      for(const [c,g] of treeGroups) if(!names.has(c)) { g.li.remove(); treeGroups.delete(c); }
+      const branches=groups.map(([c,items])=>{
+        const group=treeGroup(c,items.length);
+        placeChildren(group.children,groupOpen(c)?items.map(rendered):[]);
+        return group.li;
+      });
+      placeChildren(list,branches);
+    } else {
+      // Move rows out before removing tree containers so focus survives.
+      placeChildren(list,files.map(rendered));
+      for(const group of treeGroups.values()) group.li.remove(); treeGroups.clear();
+    }
+    if(focusBefore && list.contains(focusBefore) && document.activeElement!==focusBefore) focusBefore.focus({preventScroll:true});
+    renderSelection();
+    if(view==='grid') files.forEach(f=>{ const t=thumbs.get(f.path); if(!thumbObserver || (t && t.key!==thumbKey(f))) requestThumb(f.path); });
+    if(thumbQueue.length) void pumpThumbs();
+  }
+  function renderSelection() {
+    for(const [path,row] of rows) {
+      const chosen=selected.has(path); row.li.classList.toggle('selected',chosen);
+      row.selectedNote.textContent=chosen?'，已选中':'';
+      if(view==='tree') row.li.setAttribute('aria-selected',String(chosen));
     }
     const count=selected.size;
     $('bulk-bar').hidden=count===0; $('bulk-count').textContent=count ? '已选 '+count+' 项' : '';
-    $('view-toggle').hidden=count>0 || empty;
-    $('view-grid').setAttribute('aria-pressed',String(view==='grid')); $('view-list').setAttribute('aria-pressed',String(view==='list'));
-    // Without an observer (tests), fetch all; with one, refresh changed files.
-    files.forEach(f=>{ const t=thumbs.get(f.path); if(!thumbObserver || (t && t.key!==thumbKey(f))) requestThumb(f.path); });
-    if(thumbQueue.length) void pumpThumbs();
+    $('view-toggle').hidden=count>0 || state.references.length===0;
+    $('view-grid').setAttribute('aria-pressed',String(view==='grid')); $('view-list').setAttribute('aria-pressed',String(view==='tree'));
   }
   function paintThumb(target, file, kind) {
     const thumb=thumbs.get(file.path);
@@ -727,6 +816,7 @@
   }
   const thumbKey = file => [file.path,file.size,file.lastModified].join('|');
   function requestThumb(path) {
+    if(view==='tree') return;
     const file=state.references.find(f=>f.path===path);
     if(!file || isMissing(file)) return;
     const key=thumbKey(file), current=thumbs.get(path);
@@ -768,12 +858,12 @@
     } finally { thumbBusy=false; }
   }
   function setView(next) {
-    view=next;
+    cancelMarquee(); view=next; closeMenu();
     try { localStorage.setItem('codex-reference-panel.view',view); } catch { /* storage may be unavailable */ }
     renderFiles();
   }
   $('view-grid').addEventListener('click',()=>setView('grid'));
-  $('view-list').addEventListener('click',()=>setView('list'));
+  $('view-list').addEventListener('click',()=>setView('tree'));
   function renderDiagnostics() {
     $('host').textContent = stringify(state.host);
     $('tool').textContent = stringify(state.toolContext || {});
@@ -790,6 +880,7 @@
 
   // ----- Selection and keyboard -----
   function rowClick(path, e) {
+    if(marquee?.active || Date.now()<suppressClickUntil) return;
     const file=state.references.find(f=>f.path===path); if(!file) return;
     if(e?.metaKey || e?.ctrlKey) {
       if(selected.has(path)) selected.delete(path); else selected.add(path);
@@ -823,8 +914,30 @@
     else anchorPath=paths[next];
     focusRow(paths[next]);
   }
+  function treeNavigation(e, path) {
+    if(!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Home','End'].includes(e.key)) return false;
+    if(e.shiftKey && path && ['ArrowUp','ArrowDown','Home','End'].includes(e.key)) return false;
+    const toggle=document.activeElement?.closest?.('.tree-toggle');
+    const file=state.references.find(f=>f.path===path);
+    const category=toggle?toggle.dataset.category:file?categoryOf(file):null;
+    e.preventDefault();
+    if(e.key==='ArrowLeft') {
+      if(toggle && groupOpen(category)) toggleGroup(category,false);
+      else if(file) treeGroups.get(category)?.toggle.focus();
+    } else if(e.key==='ArrowRight') {
+      if(toggle && !groupOpen(category)) toggleGroup(category,true);
+      else if(toggle) { const first=visibleFiles().find(f=>categoryOf(f)===category); if(first) focusRow(first.path); }
+    } else {
+      const stops=groupedFiles(filteredFiles()).flatMap(([c,files])=>[treeGroups.get(c)?.toggle,...(groupOpen(c)?files.map(f=>rows.get(f.path)?.preview):[])]).filter(Boolean);
+      const current=toggle || rows.get(path)?.preview, at=stops.indexOf(current);
+      const index=e.key==='Home'?0:e.key==='End'?stops.length-1:Math.max(0,Math.min(stops.length-1,at+(e.key==='ArrowDown'?1:-1)));
+      stops[index]?.focus();
+    }
+    return true;
+  }
   $('file-list').addEventListener('keydown',e=>{
     const path=focusedPath();
+    if(view==='tree' && treeNavigation(e,path)) return;
     if(e.key==='ArrowRight' || e.key==='ArrowLeft') { e.preventDefault(); moveFocus(path,e.key==='ArrowRight'?1:-1,e.shiftKey); }
     else if(e.key==='ArrowDown' || e.key==='ArrowUp') { e.preventDefault(); const step=columns(); moveFocus(path,e.key==='ArrowDown'?step:-step,e.shiftKey); }
     else if(e.key==='Home' || e.key==='End') { e.preventDefault(); moveFocus(path,e.key==='End'?Infinity:-Infinity,e.shiftKey); }
@@ -840,6 +953,87 @@
   });
   $('bulk-remove').addEventListener('click',()=>removeReferences([...selected]));
   $('bulk-clear').addEventListener('click',()=>{ selected.clear(); renderFiles(); });
+
+  // ----- Rubber-band selection. Local UI only; never changes the shelf. -----
+  const pageX = x => x+(window.scrollX || 0), pageY = y => y+(window.scrollY || 0);
+  function finishMarquee(cancel=false) {
+    const previous=marquee; marquee=null;
+    if(marqueeFrame!==null) cancelAnimationFrame(marqueeFrame); marqueeFrame=null;
+    $('selection-box').hidden=true; document.body.classList.remove('selecting');
+    if(!previous) return;
+    if(previous.active) {
+      suppressClickUntil=Date.now()+250;
+      if(cancel) { const visible=new Set(visibleFiles().map(f=>f.path)); selected=new Set([...previous.base].filter(p=>visible.has(p))); }
+      try { document.body.releasePointerCapture(previous.id); } catch { /* pointer already released */ }
+      renderSelection();
+      if(!cancel) { anchorPath=[...selected][0] || null; const first=rows.get(anchorPath); first?.preview.focus({preventScroll:true}); }
+    }
+  }
+  function cancelMarquee() { finishMarquee(true); }
+  function paintMarquee() {
+    if(!marquee?.active) return;
+    const m=marquee, sx=window.scrollX || 0, sy=window.scrollY || 0;
+    const left=Math.min(m.x,pageX(m.clientX))-sx, top=Math.min(m.y,pageY(m.clientY))-sy;
+    const right=Math.max(m.x,pageX(m.clientX))-sx, bottom=Math.max(m.y,pageY(m.clientY))-sy;
+    const box=$('selection-box'); box.hidden=false;
+    Object.assign(box.style,{left:left+'px',top:top+'px',width:(right-left)+'px',height:(bottom-top)+'px'});
+    const picked=m.additive?new Set(m.base):new Set();
+    for(const f of visibleFiles()) {
+      const r=rows.get(f.path)?.li.getBoundingClientRect();
+      if(r && r.width>0 && r.height>0 && r.right>left && r.left<right && r.bottom>top && r.top<bottom) picked.add(f.path);
+    }
+    selected=picked; renderSelection();
+  }
+  function marqueeScroll() {
+    marqueeFrame=null; if(!marquee?.active) return;
+    const toolbar=document.querySelector?.('.toolbar')?.getBoundingClientRect();
+    const top=toolbar?.bottom || 0, bottom=window.innerHeight;
+    const y=marquee.clientY;
+    const delta=y<top+32?-Math.min(18,Math.max(0,(top+32-y)/2)):y>bottom-32?Math.min(18,Math.max(0,(y-bottom+32)/2)):0;
+    if(delta && window.scrollBy) window.scrollBy(0,delta);
+    paintMarquee(); marqueeFrame=requestAnimationFrame(marqueeScroll);
+  }
+  // Listen across the panel, including main's remaining height and outer gutters.
+  // Controls retain their own gestures; only a file's preview button can start a box.
+  document.addEventListener('pointerdown',e=>{
+    if(e.button!==0 || e.isPrimary===false || e.pointerType==='touch' || !ready || picking || resolving) return;
+    if(document.body.classList.contains('expanded') || !state.references.length) return;
+    if(e.target?.closest?.('#preview-board,#category-editor,#file-menu,.diagnostic-body')) return;
+    const control=e.target?.closest?.('button,input,textarea,select,a,label,summary,video,audio,iframe,[contenteditable]');
+    if(control && !control.classList.contains('preview-file')) return;
+    cancelMarquee(); closeMenu();
+    const fromFile=Boolean(e.target?.closest?.('.file-row'));
+    if(!fromFile) e.preventDefault(); // Keep blank-space drags from selecting labels as text.
+    marquee={id:e.pointerId,x:pageX(e.clientX),y:pageY(e.clientY),clientX:e.clientX,clientY:e.clientY,
+      base:new Set(selected),additive:Boolean(e.metaKey || e.ctrlKey || e.shiftKey),active:false,
+      fromFile};
+  });
+  document.addEventListener('pointermove',e=>{
+    if(!marquee || marquee.id!==e.pointerId) return;
+    if(e.buttons===0) { cancelMarquee(); return; }
+    marquee.clientX=e.clientX; marquee.clientY=e.clientY;
+    if(!marquee.active && Math.hypot(pageX(e.clientX)-marquee.x,pageY(e.clientY)-marquee.y)<5) return;
+    if(!marquee.active) {
+      marquee.active=true; closeCategoryEditor(); document.body.classList.add('selecting');
+      try { document.body.setPointerCapture(e.pointerId); } catch { /* document events remain available */ }
+      marqueeFrame=requestAnimationFrame(marqueeScroll);
+    }
+    e.preventDefault(); paintMarquee();
+  });
+  document.addEventListener('pointerup',e=>{
+    if(!marquee || marquee.id!==e.pointerId) return;
+    if(marquee.active) { e.preventDefault(); marquee.clientX=e.clientX; marquee.clientY=e.clientY; paintMarquee(); }
+    else if(!marquee.fromFile && !marquee.additive) { selected.clear(); renderSelection(); }
+    finishMarquee();
+  });
+  document.addEventListener('pointercancel',e=>{ if(marquee?.id===e.pointerId) cancelMarquee(); });
+  document.addEventListener('lostpointercapture',e=>{ if(marquee?.id===e.pointerId) cancelMarquee(); });
+  document.addEventListener('click',e=>{
+    if(Date.now()<suppressClickUntil) { e.preventDefault(); e.stopImmediatePropagation(); }
+  },true);
+  document.addEventListener('keydown',e=>{ if(e.key==='Escape' && marquee) { e.preventDefault(); e.stopImmediatePropagation(); cancelMarquee(); } },true);
+  window.addEventListener('blur',cancelMarquee);
+  window.addEventListener('pagehide',cancelMarquee);
 
   function removeReferences(paths, {focusAfter=false}={}) {
     const order=state.references.map(f=>f.path);
@@ -981,10 +1175,11 @@
           setStatus('项目已切换，仍有未保存的参考操作。请返回原项目处理后重新打开面板。',{error:true,sticky:true});
           return;
         }
-        closePreview(); closeCategoryEditor(); categoryFilter=null; searchQuery=''; $('reference-search').value=''; listRevision=null; listLoaded=false; selected.clear(); lastUndo=null; anchorPath=null;
+        cancelMarquee(); closePreview(); closeCategoryEditor(); categoryFilter=null; searchQuery=''; $('reference-search').value=''; listRevision=null; listLoaded=false; selected.clear(); lastUndo=null; anchorPath=null;
         state.references=[];
       }
       scopeId=response?.scopeId || null; project=response?.project || null; projectLookup=response?.projectLookup || null;
+      loadTreeScope(scopeId);
       // An in-flight save will report the newer revision itself.
       if(['shared','conversation','project'].includes(response?.listScope)) listScope=response.listScope;
       if(!saveLoop && !response?.unchanged) adoptList(response?.references,response?.listRevision);

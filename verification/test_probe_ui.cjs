@@ -43,7 +43,7 @@ function makeDocument() {
     removeAttribute(k) { delete this.attrs[k]; delete this[k]; }
     addEventListener(type,fn) { (this.handlers[type] ||= []).push(fn); }
     dispatch(type,init={}) {
-      const e={type,target:this,defaultPrevented:false,stopped:false,preventDefault(){this.defaultPrevented=true;},stopPropagation(){this.stopped=true;},...init};
+      const e={type,target:this,defaultPrevented:false,stopped:false,preventDefault(){this.defaultPrevented=true;},stopPropagation(){this.stopped=true;},stopImmediatePropagation(){this.stopped=true;},...init};
       const results=[]; let n=this;
       while(n && !e.stopped) { for(const fn of [...(n.handlers[type] || []),...(typeof n['on'+type]==='function'?[n['on'+type]]:[])]) results.push(fn(e)); n=n.parentNode; }
       if(!e.stopped) for(const fn of doc.handlers[type] || []) results.push(fn(e));
@@ -51,7 +51,9 @@ function makeDocument() {
     }
     click(init) { return this.dispatch('click',{detail:1,...init}); }
     focus() { doc.activeElement=this; }
-    getBoundingClientRect() { return {left:20,top:100,right:300,bottom:130,width:280,height:30}; }
+    getBoundingClientRect() { return this.rect || {left:20,top:100,right:300,bottom:130,width:280,height:30}; }
+    setPointerCapture(id) { this.captured=id; }
+    releasePointerCapture(id) { if(this.captured===id) this.captured=null; }
     scrollIntoView() {}
     pause() { this.paused=true; } load() {}
   }
@@ -60,7 +62,7 @@ function makeDocument() {
     getElementById(id) { if(!registry.has(id)) registry.set(id,new El('div',id)); return registry.get(id); },
     createElement:tag=>new El(tag), createElementNS:(_,tag)=>new El(tag),
     addEventListener(type,fn) { (doc.handlers[type] ||= []).push(fn); },
-    dispatch(type,init={}) { const e={type,preventDefault(){},stopPropagation(){},...init}; return Promise.all((doc.handlers[type] || []).map(fn=>fn(e))); },
+    dispatch(type,init={}) { const e={type,preventDefault(){},stopPropagation(){},stopImmediatePropagation(){},...init}; return Promise.all((doc.handlers[type] || []).map(fn=>fn(e))); },
     execCommand:()=>true});
   doc.documentElement=new El('html'); doc.body=new El('body');
   // Seed the markup's initial hidden/disabled state for elements the script uses.
@@ -68,11 +70,12 @@ function makeDocument() {
     const el=doc.getElementById(attrs.match(/\bid="([^"]+)"/)[1]);
     el.tagName=tag; el.hidden=/\shidden(\s|$)/.test(' '+attrs); el.disabled=/\sdisabled(\s|$)/.test(' '+attrs);
   }
+  doc.getElementById('selection-area').append(doc.getElementById('file-list'));
   return doc;
 }
 
 // ---- Fake host + server with per-thread revisioned lists.
-function boot({failFirstRead=false, list=[], theme={theme:'light'}, thumbnails=false, scope='conversation', serverState=null}={}) {
+function boot({failFirstRead=false, list=[], theme={theme:'light'}, thumbnails=false, scope='conversation', serverState=null, storage=new Map()}={}) {
   const doc=makeDocument();
   const windowHandlers={};
   const server=serverState || {revision:list.length?3:0, references:structuredClone(list), saves:[], conflicts:0,scope,scopeId:'fixture-'+scope,project:null};
@@ -83,7 +86,7 @@ function boot({failFirstRead=false, list=[], theme={theme:'light'}, thumbnails=f
     static createObjectURL(blob) { assert.ok(blob instanceof Blob); h.lastBlob=blob; const url='blob:fixture/'+h.blobURLs.length; h.blobURLs.push(url); return url; }
     static revokeObjectURL(url) { h.revokedURLs.push(url); }
   }
-  const window={addEventListener(type,fn){ (windowHandlers[type] ||= []).push(fn); },innerWidth:400,innerHeight:800,location:{protocol:'https:'}};
+  const window={addEventListener(type,fn){ (windowHandlers[type] ||= []).push(fn); },innerWidth:400,innerHeight:800,scrollX:0,scrollY:0,scrollBy(x,y){this.scrollX+=x;this.scrollY+=y;},location:{protocol:'https:'}};
   h.emit=(type,e={})=>Promise.all((windowHandlers[type] || []).map(fn=>fn(e)));
   h.deliver=data=>h.emit('message',{source:window.parent,data});
   window.parent={postMessage(message){
@@ -140,11 +143,14 @@ function boot({failFirstRead=false, list=[], theme={theme:'light'}, thumbnails=f
     else queueMicrotask(reply);
   }};
   const timers=(fn,ms)=>{ if(ms===3000) h.pollShelf=fn; const t=setTimeout(fn,ms); t.unref?.(); return t; };
-  const context={window,document:doc,crypto:{randomUUID},navigator:{clipboard:{async writeText(text){ h.copied=text; }}},URL:TestURL,Blob,Uint8Array,atob,Date,Map,Set,
+  const frames=new Map(); let frameId=0;
+  h.frame=()=>{ const next=[...frames.values()]; frames.clear(); next.forEach(fn=>fn()); };
+  h.window=window; h.frames=frames; h.storage=storage;
+  const context={window,document:doc,localStorage:{getItem:k=>storage.get(k) ?? null,setItem:(k,v)=>storage.set(k,String(v))},requestAnimationFrame:fn=>{frames.set(++frameId,fn);return frameId;},cancelAnimationFrame:id=>frames.delete(id),crypto:{randomUUID},navigator:{clipboard:{async writeText(text){ h.copied=text; }}},URL:TestURL,Blob,Uint8Array,atob,Date,Map,Set,
     setTimeout:timers,clearTimeout,console,Promise,Error,JSON,Math,Number,Object,Array,String,Boolean,structuredClone,queueMicrotask};
   vm.runInNewContext(script, context);
   h.$=id=>doc.getElementById(id);
-  h.rows=()=>h.$('file-list').children;
+  h.rows=()=>h.$('file-list').querySelectorAll('.file-row');
   h.row=text=>h.rows().find(r=>r.dataset.path.includes(text));
   h.drop=(files,strings={})=>({dataTransfer:{files,items:files.map(f=>({kind:'file',webkitGetAsEntry:()=>({name:f.name,fullPath:'/'+f.name,isFile:true,isDirectory:false})})),
     types:['Files',...Object.keys(strings)],getData:t=>strings[t]||'',dropEffect:''}});
@@ -269,7 +275,7 @@ function boot({failFirstRead=false, list=[], theme={theme:'light'}, thumbnails=f
   assert.equal(h.doc.activeElement,videoRow.children[0]);
   assert.equal(h.$('file-list').classList.contains('grid'),true,'the thumbnail grid is the default view');
   await h.$('view-list').click();
-  assert.equal(h.$('file-list').classList.contains('list'),true);
+  assert.equal(h.$('file-list').classList.contains('tree'),true);
   assert.equal(h.$('view-list').getAttribute('aria-pressed'),'true');
   assert.equal(h.row('视频 A.mp4'),videoRow,'switching views keeps the same rows');
   await videoRow.children[0].dispatch('keydown',{key:'ArrowDown'});
@@ -522,5 +528,122 @@ function boot({failFirstRead=false, list=[], theme={theme:'light'}, thumbnails=f
   assert.equal(c.$('category-editor').hidden,true);
   assert.equal(c.$('reference-search').value,'');
 
-  console.log('PASS synthetic UI: list scope, categories/search/bulk/conflict/reopen, thumbnails/grid/list, theme tokens, restore/conflict merge, drag/add, picker, PDF paging, menu keyboard, focus survival, video/text, stale responses, large assembly/cancel, remove/undo, multi-select, host requests, missing/relink');
+  // ---- Compact category tree: collapse, keyboard, search, storage and scope.
+  const tree=boot({list:grouped,storage:new Map([['codex-reference-panel.view','list']])}); await settle();
+  assert.equal(tree.$('file-list').getAttribute('role'),'tree','old list preference migrates to tree');
+  const branch=(label)=>tree.$('file-list').querySelectorAll('.tree-toggle').find(b=>b.dataset.category===label);
+  assert.equal(tree.$('file-list').children.length,3,'one expandable branch per category including uncategorized');
+  assert.equal(tree.rows().length,4);
+  assert.equal(tree.thumbRequests.length,0,'tree uses small icons without thumbnail requests');
+  await branch('GoldSrc').click();
+  assert.equal(tree.rows().length,2,'collapsed rows are not selectable');
+  assert.equal(branch('GoldSrc').getAttribute('aria-expanded'),'false');
+  await tree.$('file-list').dispatch('keydown',{key:'a',metaKey:true});
+  assert.equal(tree.$('bulk-count').textContent,'已选 2 项');
+  const restoredTree=boot({list:grouped,storage:tree.storage}); await settle();
+  assert.equal(restoredTree.rows().length,2,'collapse state survives reopening');
+  await tree.$('bulk-clear').click();
+  branch('GoldSrc').focus();
+  await branch('GoldSrc').dispatch('keydown',{key:'ArrowRight'});
+  assert.equal(branch('GoldSrc').getAttribute('aria-expanded'),'true');
+  await branch('GoldSrc').dispatch('keydown',{key:'ArrowRight'});
+  assert.equal(tree.doc.activeElement.getAttribute('aria-label'),'预览 Gold face.png');
+  await tree.doc.activeElement.dispatch('keydown',{key:'ArrowLeft'});
+  assert.equal(tree.doc.activeElement.dataset.category,'GoldSrc');
+  await tree.doc.activeElement.dispatch('keydown',{key:'ArrowLeft'});
+  assert.equal(tree.rows().length,2);
+  tree.$('reference-search').value='Gold'; await tree.$('reference-search').dispatch('input');
+  assert.equal(tree.rows().length,2,'search reveals matches in collapsed categories');
+  assert.ok(tree.rows().every(r=>r.dataset.path.includes('Gold')));
+  tree.$('reference-search').value=''; await tree.$('reference-search').dispatch('input');
+  assert.ok(tree.rows().every(r=>!r.dataset.path.includes('Gold')),'clearing search restores collapse state');
+  tree.server.scopeId='other-tree-project'; tree.server.revision=0; tree.server.references=structuredClone(grouped);
+  await tree.$('refresh').click(); await settle();
+  assert.equal(tree.rows().length,4,'collapse preferences are isolated by project');
+
+  // ---- Rubber-band selection from whitespace or a row; no accidental preview.
+  const band=boot({list:grouped}); await settle();
+  const rect=(x,y,w,h)=>({left:x,top:y,right:x+w,bottom:y+h,width:w,height:h});
+  band.$('selection-area').rect=rect(0,90,350,1000);
+  band.rows().forEach((r,i)=>{r.rect=rect(20,110+i*40,280,28);});
+  const pointer=(x,y,extra={})=>({pointerId:7,button:0,buttons:1,isPrimary:true,pointerType:'mouse',clientX:x,clientY:y,...extra});
+  const start=async(x,y,extra={})=>band.$('selection-area').dispatch('pointerdown',pointer(x,y,extra));
+  const move=async(x,y)=>band.doc.dispatch('pointermove',pointer(x,y));
+  const end=async(x,y)=>band.doc.dispatch('pointerup',pointer(x,y,{buttons:0}));
+  const picked=()=>band.rows().filter(r=>r.classList.contains('selected')).map(r=>r.dataset.path);
+  await start(10,105); await move(310,182);
+  assert.equal(picked().length,2); assert.equal(band.$('selection-box').hidden,false);
+  await end(310,182); assert.equal(band.$('selection-box').hidden,true); assert.equal(band.frames.size,0);
+  await band.rows()[0].children[0].click(); await settle();
+  assert.equal(band.previewRequests.length,0,'drag-release click cannot open a preview');
+  await start(10,185,{metaKey:true}); await move(310,222); await end(310,222);
+  assert.equal(picked().length,3,'modifier drag adds to the previous selection');
+  const baseline=picked();
+  await start(310,105); await move(340,180); assert.equal(picked().length,0);
+  await band.doc.dispatch('keydown',{key:'Escape'});
+  assert.deepEqual(picked(),baseline,'Escape restores selection before the drag');
+  assert.equal(band.frames.size,0);
+  await start(10,225,{target:band.rows()[3].children[0]}); await move(310,265); await end(310,265);
+  assert.deepEqual(picked(),['/fixture/video.mp4'],'drag may begin on a file without previewing it');
+  await start(10,105); await move(310,180); await band.doc.dispatch('pointercancel',pointer(310,180));
+  assert.deepEqual(picked(),['/fixture/video.mp4'],'pointer cancellation restores prior selection');
+  await start(10,105); await move(310,180); await band.emit('blur');
+  assert.deepEqual(picked(),['/fixture/video.mp4'],'losing focus cancels safely');
+  await start(10,105,{target:band.rows()[0].children[1]}); await move(310,180); await end(310,180);
+  assert.deepEqual(picked(),['/fixture/video.mp4'],'more-menu controls cannot start a marquee');
+  await start(10,105,{pointerType:'touch'}); await move(310,180); await end(310,180);
+  assert.deepEqual(picked(),['/fixture/video.mp4'],'touch scrolling is not intercepted');
+  await start(10,760); await move(310,795); band.frame();
+  assert.ok(band.window.scrollY>0,'dragging near the edge scrolls the document');
+  await band.doc.dispatch('pointercancel',pointer(310,795));
+  band.window.scrollY=0;
+  await start(340,300); await end(340,300);
+  assert.equal(picked().length,0,'a plain blank-space click clears selection');
+  await start(10,105); await move(12,107); await end(12,107);
+  assert.equal(picked().length,0,'sub-threshold motion does not start a box');
+
+  // The shelf is short; most of the panel's viewport lies outside its wrapper.
+  band.$('selection-area').rect=rect(16,100,368,180);
+  for(const [x,y,target,count] of [
+    [390,740,band.doc.body,4],
+    [1,105,band.doc.body,2],
+    [399,105,band.doc.body,2],
+    [10,70,band.doc.createElement('header'),2],
+    [390,700,band.doc.createElement('main'),4],
+  ]) {
+    await band.doc.dispatch('pointerdown',pointer(x,y,{target}));
+    await move(x>380?10:310,y>600?105:182);
+    assert.equal(band.$('selection-box').hidden,false,'panel blank space starts a rectangle');
+    assert.equal(band.doc.body.captured,7,'panel owns capture beyond the list bounds');
+    await end(x>380?10:310,y>600?105:182);
+    assert.equal(picked().length,count,'bottom, side and header whitespace can select files');
+  }
+  const outsideBaseline=picked();
+  await band.doc.body.dispatch('pointerdown',pointer(390,500)); await move(380,510); band.frame();
+  assert.equal(band.window.scrollY,0,'short-list bottom is not the viewport scroll boundary');
+  await band.doc.dispatch('lostpointercapture',pointer(380,510));
+  assert.deepEqual(picked(),outsideBaseline,'lost capture outside the list restores selection');
+  const protectedContent=band.doc.createElement('span'); band.$('preview-board').append(protectedContent);
+  const diagnostic=band.doc.createElement('div'); diagnostic.className='diagnostic-body';
+  for(const target of [band.$('choose'),band.$('reference-search'),band.$('category-input'),
+      band.$('category-editor'),band.$('file-menu'),protectedContent,diagnostic,band.doc.createElement('summary')]) {
+    await band.doc.dispatch('pointerdown',pointer(390,700,{target})); await move(10,105); await end(10,105);
+    assert.equal(band.$('selection-box').hidden,true);
+    assert.deepEqual(picked(),outsideBaseline,'interactive and preview content keeps its own gestures');
+  }
+  band.doc.body.classList.add('expanded');
+  await band.doc.body.dispatch('pointerdown',pointer(390,700)); await move(10,105); await end(10,105);
+  assert.deepEqual(picked(),outsideBaseline,'expanded preview cannot select hidden files');
+  band.doc.body.classList.remove('expanded');
+  await band.$('view-list').click();
+  band.$('file-list').querySelectorAll('.tree-toggle').find(b=>b.dataset.category==='Source').click();
+  band.rows().forEach((r,i)=>{r.rect=rect(20,110+i*40,280,28);});
+  await start(10,105); await move(310,700); await end(310,700);
+  assert.equal(picked().length,3,'tree marquee excludes collapsed children');
+  await band.doc.body.dispatch('pointerdown',pointer(390,700)); await move(10,105); await end(10,105);
+  assert.equal(picked().length,3,'tree supports panel-wide blank-space starts too');
+  assert.equal(band.server.saves.length,0,'selection never writes or deletes references');
+  assert.equal(band.previewRequests.length,0,'selection never invokes preview');
+
+  console.log('PASS synthetic UI: list scope, categories/search/bulk/conflict/reopen, compact tree/collapse/keyboard, rubber-band/add/cancel/scroll, thumbnails/grid, theme tokens, restore/conflict merge, drag/add, picker, PDF paging, menu keyboard, focus survival, video/text, stale responses, large assembly/cancel, remove/undo, multi-select, host requests, missing/relink');
 })().catch(e=>{console.error(e);process.exitCode=1;});

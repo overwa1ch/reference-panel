@@ -18,8 +18,8 @@ import threading
 import time
 import uuid
 
-VERSION = "0.8.0"
-URI = "ui://reference-test/panel-0.8.0.html"
+VERSION = "0.9.1"
+URI = "ui://reference-test/panel-0.9.1.html"
 MIME = "text/html;profile=mcp-app"
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
