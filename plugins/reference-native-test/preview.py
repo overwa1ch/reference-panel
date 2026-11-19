@@ -367,7 +367,10 @@ class Thumbnails:
             meta = json.loads((self.cache_dir() / (key + '.json')).read_text())
         except (OSError, ValueError):
             return None
-        if meta.get('status') == 'ok' and not (self.cache_dir() / meta.get('file', '')).is_file():
+        if not isinstance(meta, dict):
+            return None
+        name = meta.get('file')
+        if meta.get('status') == 'ok' and (not isinstance(name, str) or not (self.cache_dir() / name).is_file()):
             return None
         return meta
 
@@ -398,7 +401,7 @@ class Thumbnails:
             if meta.get('status') == 'ok':
                 try:
                     data = (self.cache_dir() / meta['file']).read_bytes()
-                except OSError:
+                except (OSError, KeyError, TypeError):
                     data = b''
                 if data and len(data) <= 400 * 1024:
                     item['data'] = base64.b64encode(data).decode('ascii')
@@ -441,7 +444,14 @@ class Thumbnails:
 
     @staticmethod
     def _prune(cache):
-        metas = sorted(cache.glob('*.json'), key=lambda p: p.stat().st_mtime)
+        # The cache is shared by every backend, so an entry can vanish between
+        # the glob and the stat.
+        def mtime(path):
+            try:
+                return path.stat().st_mtime
+            except OSError:
+                return 0
+        metas = sorted(cache.glob('*.json'), key=mtime)
         for meta in metas[:max(0, len(metas) - THUMB_CACHE_LIMIT)]:
             for path in cache.glob(meta.stem + '.*'):
                 path.unlink(missing_ok=True)

@@ -5,6 +5,7 @@ import importlib.util
 import io
 import json
 import os
+import pathlib
 from pathlib import Path
 import stat
 import subprocess
@@ -647,8 +648,21 @@ class BackendFixTests(unittest.TestCase):
             with patch.object(probe.subprocess, "run", return_value=probe.subprocess.CompletedProcess([], 0, "", "")) as run:
                 probe.FileActions().perform("reveal", str(package))
             self.assertEqual(run.call_args.args[0], ["/usr/bin/open", "-R", str(package)])
+            # Quick Look previews a package too, so it must not report "missing".
+            with patch.object(probe.subprocess, "Popen") as popen:
+                popen.return_value.wait.return_value = 0
+                outcome = probe.FileActions().perform("preview", str(package))
+            self.assertEqual(outcome["status"], "requested")
+            self.assertEqual(outcome["handler"], "quick-look")
             shown = preview.PreviewService(ROOT).prepare(str(package), "A")
             self.assertEqual((shown["kind"], shown["reason"]), ("unsupported", "package"))
+
+    def test_a_missing_file_still_reports_missing(self):
+        with tempfile.TemporaryDirectory() as temp:
+            gone = Path(temp) / "gone.txt"
+            with self.assertRaises(probe.ToolError) as caught:
+                probe.FileActions().perform("preview", str(gone))
+            self.assertEqual(caught.exception.code, "missing")
 
     def test_text_encodings_and_cut_characters(self):
         cases = [("中文笔记".encode("gb18030"), "gb18030"), (codecs.BOM_UTF16_LE + "中文".encode("utf-16-le"), "utf-16-le"),
@@ -738,6 +752,32 @@ class ThumbnailTests(unittest.TestCase):
         with patch.object(preview.os, "stat", return_value=evicted), \
              patch.object(preview.subprocess, "run", side_effect=AssertionError("must not download")):
             self.assertEqual(self.service.get([str(self.note)])[str(self.note)]["status"], "icloud")
+
+    def test_a_poisoned_cache_entry_is_regenerated_not_fatal(self):
+        key = preview.Thumbnails.key(str(self.note), os.stat(self.note))
+        self.cache.mkdir(parents=True, exist_ok=True)
+        for broken in ({"status": "ok", "file": 123}, {"status": "ok", "file": None},
+                       {"status": "ok"}, [1, 2], "not-a-dict"):
+            with self.subTest(meta=broken):
+                (self.cache / (key + ".json")).write_text(json.dumps(broken), encoding="utf-8")
+                item = self.service.get([str(self.note)])[str(self.note)]
+                self.assertIn(item["status"], ("ok", "none"))
+
+    def test_pruning_survives_a_concurrent_backend_deleting_an_entry(self):
+        self.cache.mkdir(parents=True, exist_ok=True)
+        for name in ("a", "b"):
+            (self.cache / (name + ".json")).write_text("{}", encoding="utf-8")
+        real_glob = pathlib.Path.glob
+
+        def racing_glob(self, pattern):
+            found = list(real_glob(self, pattern))
+            if pattern == "*.json":  # another backend prunes the same cache
+                for path in found:
+                    path.unlink(missing_ok=True)
+            return found
+
+        with patch.object(pathlib.Path, "glob", racing_glob):
+            preview.Thumbnails._prune(self.cache)  # must not raise
 
     def test_cache_is_bounded(self):
         notes = []
@@ -831,6 +871,74 @@ class ProtocolTests(unittest.TestCase):
              patch.object(probe, "choose_files", side_effect=choose), patch.object(probe.PICKER, "cancel", side_effect=release.set) as cancel:
             self.serve(lines())
         cancel.assert_called_once()
+
+
+class RecoveryTests(unittest.TestCase):
+    """A damaged record must cost one record, not the whole shelf."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.folder = Path(self.tmp.name)
+        self.state = self.folder / "state"
+        self.log = self.folder / "probe.jsonl"
+        patcher = patch.object(probe, "LIST_DIR", self.state / "lists")
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        patcher = patch.object(probe, "LOG", self.log)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_one_bad_category_does_not_lose_the_others(self):
+        self.log.write_text(json.dumps({"toolContext": {"requestMeta": {"threadId": "A"}},
+                                        "panel": {"references": [{"path": "/a.txt", "category": "z" * 100},
+                                                                 {"path": "/b.txt"}]}}) + "\n", encoding="utf-8")
+        lists = probe.legacy_lists(self.log)
+        self.assertEqual([item["path"] for item in lists["A"]], ["/a.txt", "/b.txt"])
+        self.assertNotIn("category", lists["A"][0])
+
+    def test_a_write_with_a_bad_category_is_still_refused(self):
+        with self.assertRaises(probe.ToolError):
+            probe.STORE.save("A", [{"path": "/a.txt", "category": "z" * 100}], 0)
+
+    def test_a_legacy_snapshot_reports_a_conflict_instead_of_claiming_success(self):
+        probe.STORE.save("A", [{"path": "/other.txt"}], 0)
+        # Another backend moves the list on between the read and the write.
+        original_load = probe.ReferenceStore.load
+
+        def racing_load(self, owner):
+            revision, references = original_load(self, owner)
+            if owner == "A":
+                probe.STORE.save("A", [{"path": "/newer.txt"}], revision)
+            return revision, references
+
+        with patch.object(probe.ReferenceStore, "load", racing_load):
+            answer = probe.dispatch("tools/call", {"name": "save_probe_snapshot", "arguments": {
+                "snapshot": {"schema": 2, "references": [{"path": "/legacy.txt"}]}}, "_meta": {"threadId": "A"}})
+        self.assertEqual(answer["structuredContent"]["listStatus"], "conflict")
+        self.assertEqual([item["path"] for item in probe.STORE.load("A")[1]], ["/newer.txt"])
+
+    def test_a_failed_migration_does_not_strand_the_legacy_list(self):
+        legacy = self.folder / "legacy.txt"
+        legacy.write_text("x")
+        probe.STORE.save("thread-1", [{"path": str(legacy)}], 0)
+        first = self.folder / "one"
+        second = self.folder / "two"
+        first.mkdir()
+        second.mkdir()
+        store = probe.ReferenceStore()
+        owner_one = "project:" + str(first)
+        owner_two = "project:" + str(second)
+        with patch.object(probe.ReferenceStore, "write", side_effect=OSError("disk full")):
+            with self.assertRaises(OSError):
+                store.migrate(owner_one, "thread-1")
+        # The chat moved on: the legacy list must still reach the new project.
+        revision, references = store.migrate(owner_two, "thread-1")
+        self.assertEqual([item["path"] for item in references], [str(legacy)])
+        # A completed claim still keeps the list in its first project.
+        owner_three = "project:" + str(self.folder / "three")
+        (self.folder / "three").mkdir()
+        self.assertEqual(store.migrate(owner_three, "thread-1")[1], [])
 
 
 if __name__ == "__main__":

@@ -321,9 +321,7 @@
   <symbol id="icon-warning" viewBox="0 0 24 24"><path d="M12 4 2.8 19.5h18.4Z"/><path d="M12 10v4M12 17h.01"/></symbol>
   <symbol id="icon-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></symbol>
   <symbol id="icon-tree" viewBox="0 0 24 24"><path d="M5 3v15M5 8h5M5 18h5"/><rect x="10" y="5" width="10" height="6" rx="1"/><rect x="10" y="15" width="10" height="6" rx="1"/></symbol>
-  <symbol id="icon-list" viewBox="0 0 24 24"><rect x="4" y="5" width="5" height="4" rx="1"/><rect x="4" y="15" width="5" height="4" rx="1"/><path d="M12 7h8M12 17h8"/></symbol>
   <symbol id="icon-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
-  <symbol id="icon-link" viewBox="0 0 16 16"><path d="m6 5-2 2a2.8 2.8 0 0 0 4 4l2-2M10 11l2-2a2.8 2.8 0 0 0-4-4L6 7"/></symbol>
 </svg>
 <header class="toolbar">
   <div class="heading"><h1>参考</h1><span id="file-count" class="count" aria-live="polite"></span></div>
@@ -407,7 +405,7 @@
   'use strict';
   const $ = id => document.getElementById(id);
   const VERSION = '0.9.2';
-  const state = { schema: 3, version: VERSION, panelInstance: crypto.randomUUID(), openedAt: new Date().toISOString(), host: {}, toolContext: null, drops: [], selections: [], references: [], events: [] };
+  const state = { schema: 3, panelInstance: crypto.randomUUID(), openedAt: new Date().toISOString(), host: {}, toolContext: null, drops: [], selections: [], references: [], events: [] };
   const pending = new Map(); let rpcId = 0, ready = false, picking = false, resolving = false, actionBusy = false;
   // List persistence: local edits are ops replayed onto the server's latest list.
   let listRevision = null, listLoaded = false, restoreError = null, pendingOps = [], saveLoop = null;
@@ -515,7 +513,7 @@
   function applyHostTheme() {
     const context=state.host.hostContext || {};
     const root=document.documentElement;
-    if(context.theme==='light' || context.theme==='dark') { root.style.colorScheme=context.theme; root.dataset.theme=context.theme; }
+    if(context.theme==='light' || context.theme==='dark') root.style.colorScheme=context.theme;
     const variables=context.styles?.variables;
     if(!variables || typeof variables!=='object') return;
     hostVariables.forEach(name=>root.style.removeProperty(name));
@@ -536,9 +534,17 @@
       else if(op.type==='category') { const paths=new Set(op.paths); out=out.map(f=>paths.has(f.path)?{...f,category:op.category}:f); }
       else if(op.type==='replace') {
         // Relink keeps the row's position; a duplicate of the new path goes.
-        out=out.filter(f=>f.path!==op.file.path || f.path===op.oldPath);
+        // Replaying the same op must not move the row: the old path may
+        // already be gone, in which case the new path keeps its own position.
         const at=out.findIndex(f=>f.path===op.oldPath);
-        if(at>=0) out[at]=op.file; else out.push(op.file);
+        if(at>=0) {
+          const keep=out[at];
+          out=out.filter(f=>f.path!==op.file.path || f===keep);
+          out[out.indexOf(keep)]=op.file;
+        } else {
+          const existing=out.findIndex(f=>f.path===op.file.path);
+          if(existing>=0) out[existing]=op.file; else out.push(op.file);
+        }
       } else if(op.type==='restore') {
         for(const {index,file} of op.items.slice().sort((a,b)=>a.index-b.index)) {
           if(!out.some(f=>f.path===file.path)) out.splice(Math.min(index,out.length),0,file);
@@ -565,7 +571,9 @@
     selected=new Set([...selected].filter(p=>paths.has(p)));
     if(activePreview) {
       const fresh=state.references.find(f=>f.path===activePreview.file.path);
-      if(fresh) activePreview.file=fresh;
+      // Another panel removed the previewed file; a stale preview would still
+      // offer reveal/open for a path the shelf no longer holds.
+      if(fresh) activePreview.file=fresh; else closePreview();
     }
     if(pendingOps.length) void persist();
   }
@@ -698,7 +706,7 @@
     let row=rows.get(file.path);
     if(!row) {
       const li=node('li','file-row'); li.dataset.path=file.path;
-      const preview=node('button','preview-file'); preview.type='button'; preview.dataset.role='preview';
+      const preview=node('button','preview-file'); preview.type='button';
       const mark=node('span','thumb'); mark.setAttribute('aria-hidden','true');
       const check=node('span','check'); check.append(icon('check'));
       const info=node('span','file-info');
@@ -706,7 +714,7 @@
       const category=node('span','category-badge'); info.append(title,meta,category);
       const selectedNote=node('span','visually-hidden');
       preview.append(mark,info,selectedNote);
-      const more=node('button','more-button'); more.type='button'; more.dataset.role='more';
+      const more=node('button','more-button'); more.type='button';
       more.title='更多操作'; more.setAttribute('aria-haspopup','menu'); more.setAttribute('aria-expanded','false'); more.append(icon('more'));
       preview.addEventListener('click',e=>rowClick(li.dataset.path,e));
       more.addEventListener('click',e=>{
@@ -720,6 +728,12 @@
       thumbObserver?.observe(li);
     }
     return row;
+  }
+  // The button's own label carries the selection state; the visually hidden
+  // note inside it is overridden by aria-label.
+  function rowBaseLabel(row) {
+    const base=row.title.textContent, missing=row.li.classList.contains('missing');
+    return (missing?'已失效：':'预览 ')+base+(selected.has(row.li.dataset.path)?'，已选中':'');
   }
   function updateRow(row, file) {
     const name=nameOf(file), kind=fileKind(file), missing=isMissing(file);
@@ -743,7 +757,8 @@
     if(missing) row.meta.replaceChildren(icon('warning'),node('span','','文件已不在原位置'));
     else row.meta.replaceChildren(node('span','',[ext || KIND_LABEL[kind],duration(thumb?.duration),fileSize(file.size)].filter(Boolean).join(' · ')),node('span','dir','· '+shortDirectory(file)));
     row.meta.title=file.path;
-    row.preview.setAttribute('aria-label',(missing?'已失效：':'预览 ')+name);
+    row.preview.setAttribute('aria-label',rowBaseLabel(row));
+    row.preview.setAttribute('aria-pressed',String(chosen));
     row.selectedNote.textContent=chosen?'，已选中':'';
     row.more.setAttribute('aria-label',name+' 的更多操作');
   }
@@ -796,6 +811,9 @@
     for(const [path,row] of rows) {
       const chosen=selected.has(path); row.li.classList.toggle('selected',chosen);
       row.selectedNote.textContent=chosen?'，已选中':'';
+      // Grid rows carry no aria-selected; the button's own state announces it.
+      row.preview.setAttribute('aria-pressed',String(chosen));
+      row.preview.setAttribute('aria-label',rowBaseLabel(row));
       if(view==='tree') row.li.setAttribute('aria-selected',String(chosen));
     }
     const count=selected.size;
@@ -829,6 +847,8 @@
     const thumb=thumbs.get(path);
     if(thumb?.url) URL.revokeObjectURL(thumb.url);
     thumbs.delete(path);
+    // The preview header shows the same object URL; repaint it before it breaks.
+    if(activePreview?.file.path===path) paintThumb($('preview-icon'),activePreview.file,fileKind(activePreview.file));
   }
   async function pumpThumbs() {
     if(thumbBusy || !ready) return;
@@ -1238,6 +1258,8 @@
   function revokeStale() { staleBlobs.forEach(url=>URL.revokeObjectURL(url)); staleBlobs=[]; }
   function clearPreviewMedia({keepContent=false}={}) {
     clearTimeout(previewTimer);
+    // A page turn dims the old page; an abandoned turn must not dim the next one.
+    $('preview-content').style.opacity='';
     if(keepContent) { if(activeBlob) staleBlobs.push(activeBlob); }
     else {
       for(const media of $('preview-content').querySelectorAll('video,audio')) {
@@ -1389,14 +1411,14 @@
           media.setAttribute('sandbox','');
           media.setAttribute('referrerpolicy','no-referrer');
           media.title=nameOf(file);
-          media.addEventListener('load',loaded);
+          media.addEventListener('load',()=>{ $('preview-content').style.opacity=''; loaded(); });
           media.addEventListener('error',()=>failed('网页预览未能加载，请重试。'));
         } else if(isMedia) {
           media.controls=true; media.preload='auto'; media.playsInline=true;
           media.addEventListener('loadedmetadata',()=>{
             if(preview.kind==='video' && media.videoWidth && media.videoHeight) $('preview-stage').style.setProperty('--ratio',media.videoWidth+' / '+media.videoHeight);
           });
-          media.addEventListener('loadeddata',loaded);
+          media.addEventListener('loadeddata',()=>{ $('preview-content').style.opacity=''; loaded(); });
           media.addEventListener('error',()=>{
             const code=media.error?.code;
             event('media-error',{kind:preview.kind,code:code || null,message:media.error?.message || ''});

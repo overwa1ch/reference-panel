@@ -264,6 +264,22 @@ def log_quietly(path, row):
         return False
 
 
+def legacy_row_parts(row):
+    """Panel and owner of one diagnostic row; tolerates malformed or truncated rows."""
+    if not isinstance(row, dict):
+        return {}, None
+    panel = row.get("panel")
+    if not isinstance(panel, dict):
+        panel = {}
+    context = row.get("toolContext")
+    if not isinstance(context, dict):
+        context = {}
+    meta = context.get("requestMeta")
+    if not isinstance(meta, dict):
+        meta = None
+    return panel, drag_owner(meta)
+
+
 def legacy_lists(log):
     """Each owner's last list in a 0.4.x diagnostic log, oldest owner first."""
     lists = {}
@@ -276,16 +292,15 @@ def legacy_lists(log):
             row = json.loads(line)
         except (ValueError, UnicodeDecodeError):
             continue
-        panel = row.get("panel", {}) if isinstance(row, dict) else {}
-        owner = drag_owner(row.get("toolContext", {}).get("requestMeta")) if isinstance(row, dict) else None
-        if owner and isinstance(panel, dict) and isinstance(panel.get("references"), list):
+        panel, owner = legacy_row_parts(row)
+        if owner and isinstance(panel.get("references"), list):
             lists[owner] = clean_references(panel["references"])
     return lists
 
 
-def legacy_references(owner):
+def legacy_references(requested):
     """0.4.x kept lists inside the shared diagnostic log; read it once as a fallback."""
-    if not owner or not LOG.exists():
+    if not requested or not LOG.exists():
         return []
     with LOG_LOCK, LOG.open("rb") as source:
         end = source.seek(0, 2)
@@ -296,8 +311,8 @@ def legacy_references(owner):
             row = json.loads(line)
         except (ValueError, UnicodeDecodeError):
             continue
-        panel = row.get("panel", {}) if isinstance(row, dict) else {}
-        if drag_owner(row.get("toolContext", {}).get("requestMeta")) == owner and isinstance(panel.get("references"), list):
+        panel, owner = legacy_row_parts(row)
+        if owner == requested and isinstance(panel.get("references"), list):
             return clean_references(panel["references"])
     return []
 
@@ -308,8 +323,13 @@ def clean_category(value):
     return value.strip()
 
 
-def clean_references(references):
-    """Keep known fields of absolute-path entries, first occurrence per path."""
+def clean_references(references, strict=False):
+    """Keep known fields of absolute-path entries, first occurrence per path.
+
+    This sanitises untrusted data (a legacy log, a hand-edited state file), so
+    one bad record is dropped instead of failing the whole list. With strict,
+    a bad category is rejected instead of dropped.
+    """
     cleaned, seen = [], set()
     for item in references:
         if not isinstance(item, dict):
@@ -321,7 +341,12 @@ def clean_references(references):
                  if key in item and isinstance(item[key], kind) and not (isinstance(item[key], str) and len(item[key]) > 4096)}
         entry.setdefault("name", Path(path).name)
         if "category" in entry:
-            entry["category"] = clean_category(entry["category"])
+            try:
+                entry["category"] = clean_category(entry["category"])
+            except ToolError:
+                if strict:
+                    raise
+                del entry["category"]  # An unreadable label must not lose the file.
         seen.add(path)
         cleaned.append(entry)
     return cleaned
@@ -515,14 +540,24 @@ class ReferenceStore:
         scope_id = self.path(owner).stem
         current = self.document(owner)
         def claimed_elsewhere():
+            """True when another project already took this chat's legacy list.
+
+            A claim that was written but never completed — the list write
+            failed — may be retried, so the legacy list is not stranded.
+            """
             try:
-                destination = json.loads(claim.read_text(encoding="utf-8")).get("scopeId")
+                record = json.loads(claim.read_text(encoding="utf-8"))
             except FileNotFoundError:
                 return False
             except (OSError, ValueError, AttributeError):
                 raise ToolError("参考列表迁移归属无法读取", "store") from None
+            if not isinstance(record, dict):
+                raise ToolError("参考列表迁移归属无效", "store")
+            destination = record.get("scopeId")
             if not isinstance(destination, str) or len(destination) != 64:
                 raise ToolError("参考列表迁移归属无效", "store")
+            if record.get("completed") is False:
+                return False
             return destination != scope_id
         if claimed_elsewhere():
             return current["revision"], clean_references(current["references"])
@@ -545,21 +580,26 @@ class ReferenceStore:
                     raise ToolError(f"合并后超过 {MAX_REFERENCES} 个参考，原列表已保留", "too-many")
                 # Claim first: after a crash this project can retry, while a
                 # moved chat cannot import its old shelf into another project.
+                # The claim is only binding once the list write succeeded.
                 temporary = claim.with_name(claim.name + f".{os.getpid()}.tmp")
                 with os.fdopen(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w", encoding="utf-8") as output:
-                    json.dump({"scopeId": scope_id}, output)
+                    json.dump({"scopeId": scope_id, "completed": False}, output)
                 os.replace(temporary, claim)
                 if marker not in current.get("migratedThreads", []):
                     current["migratedThreads"] = current.get("migratedThreads", []) + [marker]
                 current["legacyRevisions"] = {**current.get("legacyRevisions", {}), marker: old_revision}
                 revision = self.write(owner, references, current)
+                temporary = claim.with_name(claim.name + f".{os.getpid()}.done.tmp")
+                with os.fdopen(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w", encoding="utf-8") as output:
+                    json.dump({"scopeId": scope_id, "completed": True}, output)
+                os.replace(temporary, claim)
                 return revision, references
             return current["revision"], clean_references(current["references"])
 
     def save(self, owner, references, base_revision):
         if not owner:
             raise ToolError("当前对话没有提供身份，无法保存参考列表", "no-owner")
-        references = clean_references(references)
+        references = clean_references(references, strict=True)
         if len(references) > MAX_REFERENCES:
             raise ToolError(f"参考列表最多保存 {MAX_REFERENCES} 项", "too-many")
         LIST_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -674,8 +714,9 @@ class FileActions:
             raise ToolError("不支持的文件操作")
         if not isinstance(path, str) or not os.path.isabs(path) or "\x00" in path:
             raise ToolError("文件路径无效")
-        # Finder and the default app also accept file packages (.key, .rtfd).
-        present = Path(path).is_file() if action == "preview" else os.path.exists(path)
+        # Finder and the default app also accept file packages (.key, .rtfd);
+        # Quick Look previews them too, so a directory is present as well.
+        present = os.path.exists(path) if action != "preview" else Path(path).is_file() or Path(path).is_dir()
         if not present:
             raise ToolError("原文件已移动或删除", "missing")
         video = action == "preview" and Path(path).suffix.lower() in VIDEO_EXTENSIONS
@@ -1019,12 +1060,16 @@ def call_tool(name, args, meta):
             raise ValueError("snapshot 必须是对象")
         snapshot = scrub(args["snapshot"])
         # 0.4.x panels still carried the list in the snapshot; keep them working.
+        list_status = None
         if isinstance(snapshot.get("references"), list) and snapshot.get("schema", 0) < 3:
             revision = STORE.load(owner)[0]
-            STORE.save(owner, args["snapshot"]["references"], revision)
+            outcome = STORE.save(owner, args["snapshot"]["references"], revision)
+            # Another backend may have moved the list on between the two reads.
+            # Report that instead of claiming the list was written.
+            list_status = outcome["status"]
         row = {"schema": 1, "eventId": str(uuid.uuid4()), "toolContext": data, "panel": snapshot}
         append_record(LOG, row)
-        return result({"probeContext": data, "saved": True, "eventId": row["eventId"]})
+        return result({"probeContext": data, "saved": True, "eventId": row["eventId"], "listStatus": list_status})
     raise MethodNotFound(f"未知工具：{name}")
 
 
