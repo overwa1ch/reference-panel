@@ -645,5 +645,38 @@ function boot({failFirstRead=false, list=[], theme={theme:'light'}, thumbnails=f
   assert.equal(band.server.saves.length,0,'selection never writes or deletes references');
   assert.equal(band.previewRequests.length,0,'selection never invokes preview');
 
-  console.log('PASS synthetic UI: list scope, categories/search/bulk/conflict/reopen, compact tree/collapse/keyboard, rubber-band/add/cancel/scroll, thumbnails/grid, theme tokens, restore/conflict merge, drag/add, picker, PDF paging, menu keyboard, focus survival, video/text, stale responses, large assembly/cancel, remove/undo, multi-select, host requests, missing/relink');
+  // ---- A preview whose file leaves the list must not stay on screen.
+  const lonely={path:'/fixture/离开.mp4',name:'离开.mp4',size:100,exists:true,isFile:true};
+  const leaving=boot({list:[lonely]});
+  await settle();
+  await leaving.row('离开').children[0].click(); await settle();
+  assert.equal(leaving.$('preview-board').hidden,false,'the preview opened');
+  leaving.server.references=[]; leaving.server.revision++;
+  await leaving.$('refresh').click(); await settle();
+  assert.equal(leaving.$('preview-board').hidden,true,'a preview for a removed file must close');
+
+  // ---- An abandoned page turn must not dim the next preview.
+  const paged=boot({list:[{path:'/fixture/翻页.pdf',name:'翻页.pdf',size:100,exists:true,isFile:true},
+                          {path:'/fixture/随后.mp4',name:'随后.mp4',size:100,exists:true,isFile:true}]});
+  await settle();
+  await paged.row('翻页').children[0].click(); await settle();
+  await paged.$('preview-content').children[0].dispatch('load'); await settle();
+  await paged.$('next-page').click(); await settle();
+  assert.equal(paged.$('preview-content').style.opacity,'.55','the old page dims while the next one loads');
+  await paged.$('close-preview').click(); await settle();
+  assert.equal(paged.$('preview-content').style.opacity,'','closing clears the dimming');
+  await paged.row('随后').children[0].click(); await settle();
+  assert.equal(paged.$('preview-content').style.opacity,'','the next preview is not dimmed');
+
+  // ---- Grid rows announce their selection state.
+  const selectable=boot({list:[{path:'/fixture/选中.mp4',name:'选中.mp4',size:100,exists:true,isFile:true}]});
+  await settle();
+  const selectableRow=selectable.rows()[0];
+  assert.equal(selectableRow.getAttribute('aria-selected'),null,'grid rows carry no aria-selected');
+  assert.equal(selectableRow.children[0].getAttribute('aria-pressed'),'false');
+  await selectableRow.children[0].click({metaKey:true}); await settle();
+  assert.equal(selectableRow.children[0].getAttribute('aria-pressed'),'true','the button announces the selection');
+  assert.match(selectableRow.children[0].getAttribute('aria-label'),/已选中/,'the label names the selection');
+
+  console.log('PASS synthetic UI: list scope, categories/search/bulk/conflict/reopen, compact tree/collapse/keyboard, rubber-band/add/cancel/scroll, thumbnails/grid, theme tokens, restore/conflict merge, drag/add, picker, PDF paging, menu keyboard, focus survival, video/text, stale responses, large assembly/cancel, remove/undo, multi-select, host requests, missing/relink, stale preview/cleared dimming/announced selection');
 })().catch(e=>{console.error(e);process.exitCode=1;});

@@ -138,5 +138,45 @@ class NativePickerTests(unittest.TestCase):
         self.assertFalse(missing[0]["exists"])
 
 
+class MalformedLogTests(unittest.TestCase):
+    """A corrupt or truncated diagnostic row must not break list recovery."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.folder = Path(self.tmp.name)
+        self.log = self.folder / "probe.jsonl"
+
+    def write(self, rows):
+        self.log.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+        return self.log
+
+    def test_malformed_rows_do_not_crash_list_recovery(self):
+        broken = [
+            {"toolContext": None, "panel": {"references": [{"path": "/a.mov"}]}},
+            {"toolContext": "oops", "panel": {"references": [{"path": "/b.mov"}]}},
+            {"toolContext": [], "panel": {"references": [{"path": "/c.mov"}]}},
+            {"toolContext": {"requestMeta": "oops"}, "panel": {"references": [{"path": "/d.mov"}]}},
+            {"toolContext": {"requestMeta": {"threadId": "T"}}, "panel": None},
+            {"toolContext": {"requestMeta": {"threadId": "T"}}, "panel": "x"},
+            {"toolContext": {"requestMeta": {"threadId": "T"}}, "panel": {"references": "not-a-list"}},
+            [1, 2, 3],
+            "a bare string",
+        ]
+        for row in broken:
+            with self.subTest(row=row):
+                self.write([row])
+                self.assertEqual(probe.legacy_lists(self.log), {})
+                self.assertEqual(probe.legacy_references("T"), [])
+
+    def test_a_well_formed_row_still_recovers(self):
+        self.write([{"toolContext": {"requestMeta": {"threadId": "T"}},
+                    "panel": {"references": [{"path": "/a.mov"}]}}])
+        self.assertEqual(probe.legacy_lists(self.log), {"T": [{"path": "/a.mov", "name": "a.mov"}]})
+        with patch.object(probe, "LOG", self.log):
+            self.assertEqual(probe.legacy_references("T"), [{"path": "/a.mov", "name": "a.mov"}])
+            self.assertEqual(probe.legacy_references("other"), [])
+
+
 if __name__ == "__main__":
     unittest.main()
