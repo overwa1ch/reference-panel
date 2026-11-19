@@ -217,6 +217,22 @@ def scrub(value, depth=0):
     return value
 
 
+def scrub_snapshot(snapshot):
+    """Bound a panel snapshot without truncating the reference list in it.
+
+    The list is the payload a 0.4.x panel kept, and the diagnostic log is
+    where a legacy list is recovered from, so cutting it to 150 entries
+    would silently lose the tail of a long shelf.
+    """
+    if not isinstance(snapshot, dict):
+        return scrub(snapshot)
+    cleaned = scrub(snapshot)
+    references = snapshot.get("references")
+    if isinstance(references, list):
+        cleaned["references"] = [scrub(item) for item in references]
+    return cleaned
+
+
 def context(meta):
     # Reinstalling a local plugin can remove the inode of a running process's
     # working directory. Diagnostics must not break every tool in that case.
@@ -1058,7 +1074,7 @@ def call_tool(name, args, meta):
     if name == "save_probe_snapshot":
         if not isinstance(args.get("snapshot"), dict):
             raise ValueError("snapshot 必须是对象")
-        snapshot = scrub(args["snapshot"])
+        snapshot = scrub_snapshot(args["snapshot"])
         # 0.4.x panels still carried the list in the snapshot; keep them working.
         list_status = None
         if isinstance(snapshot.get("references"), list) and snapshot.get("schema", 0) < 3:
@@ -1102,7 +1118,7 @@ def dispatch(method, params):
 
 
 SLOW_TOOLS = {"import_reference_files", "set_reference_category", "open_reference_probe", "read_probe_context", "capture_reference_drag", "resolve_reference_drop", "read_reference_thumbnails",
-              "reference_file_action", "prepare_reference_preview", "read_reference_preview_chunk"}
+              "reference_file_action", "prepare_reference_preview", "read_reference_preview_chunk", "save_reference_list"}
 
 
 def serve(input_stream=None, output_stream=None):

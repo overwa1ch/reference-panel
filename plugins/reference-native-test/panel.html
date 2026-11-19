@@ -860,7 +860,9 @@
         const batch=[...new Set(thumbQueue.splice(0,6))].filter(p=>thumbs.get(p)?.state==='pending');
         if(!batch.length) continue;
         let items={};
-        try { items=(await callTool('read_reference_thumbnails',{paths:batch},45000))?.referenceThumbnails || {}; }
+        // The renderer may spend 8 s on each file, so the wait must cover the
+        // whole batch: a shorter timeout throws away work already done.
+        try { items=(await callTool('read_reference_thumbnails',{paths:batch},10000+8000*batch.length))?.referenceThumbnails || {}; }
         catch(error) { event('thumbnail-error',errorText(error)); }
         for(const path of batch) {
           const thumb=thumbs.get(path), item=items[path];
