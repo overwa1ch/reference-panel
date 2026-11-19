@@ -1,0 +1,36 @@
+name: verify
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    # The native helpers link AppKit, AVFoundation, PDFKit and
+    # QuickLookThumbnailing, so the checks only run on macOS.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show the toolchain
+        run: |
+          sw_vers
+          xcodebuild -version
+          python3 --version
+          node --version
+
+      - name: Build the native helpers
+        run: sh plugins/reference-native-test/build-picker.sh
+
+      - name: Python checks
+        run: python3 -m unittest discover -s verification -p 'test_*.py' -v
+
+      - name: Panel checks
+        run: node verification/test_probe_ui.cjs
+
+      - name: Whitespace check
+        run: git diff --check
