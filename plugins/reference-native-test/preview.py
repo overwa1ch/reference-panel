@@ -33,11 +33,21 @@ THUMB_EDGE = 480
 THUMB_ALPHA = {'.png', '.gif', '.webp', '.svg'}
 THUMB_BATCH = 12
 THUMB_CACHE_LIMIT = 800
+# The renderer waits up to 8 s per file for Quick Look and does the files one
+# after another, so a batch can legitimately take 8 s each. The budget must
+# cover that worst case: capping it lower throws away a whole batch's work.
+THUMB_FILE_SECONDS = 8
+THUMB_STARTUP_SECONDS = 10
 TEXT_BYTES = 256 * 1024
 CHUNK_BYTES = 512 * 1024
 SF_DATALESS = 0x40000000
 # Blocked reads (slow volumes) must not occupy every server worker.
 CHUNK_SLOTS = threading.BoundedSemaphore(4)
+
+
+def thumb_timeout(count):
+    """Seconds the thumbnail renderer may take for a batch of `count` files."""
+    return THUMB_STARTUP_SECONDS + THUMB_FILE_SECONDS * max(0, count)
 
 
 class ToolError(ValueError):
@@ -418,7 +428,7 @@ class Thumbnails:
             entries = [f'{thumbnail_kind(path)}\t{path}' for path, _ in todo]
             try:
                 rendered = subprocess.run([str(self.root / 'bin/reference-render'), 'thumbs', str(THUMB_EDGE), folder, *entries],
-                                          capture_output=True, text=True, timeout=min(60, 10 + 8 * len(todo)), check=False)
+                                          capture_output=True, text=True, timeout=thumb_timeout(len(todo)), check=False)
                 items = json.loads(rendered.stdout) if rendered.returncode == 0 else None
             except (OSError, subprocess.TimeoutExpired, ValueError):
                 items = None

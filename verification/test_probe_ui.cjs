@@ -678,5 +678,33 @@ function boot({failFirstRead=false, list=[], theme={theme:'light'}, thumbnails=f
   assert.equal(selectableRow.children[0].getAttribute('aria-pressed'),'true','the button announces the selection');
   assert.match(selectableRow.children[0].getAttribute('aria-label'),/已选中/,'the label names the selection');
 
-  console.log('PASS synthetic UI: list scope, categories/search/bulk/conflict/reopen, compact tree/collapse/keyboard, rubber-band/add/cancel/scroll, thumbnails/grid, theme tokens, restore/conflict merge, drag/add, picker, PDF paging, menu keyboard, focus survival, video/text, stale responses, large assembly/cancel, remove/undo, multi-select, host requests, missing/relink, stale preview/cleared dimming/announced selection');
+  // ---- Undo must not claim a restore it did not perform.
+  const undoable=boot({list:[{path:'/fixture/撤销.mp4',name:'撤销.mp4',size:100,exists:true,isFile:true}]});
+  await settle();
+  await undoable.row('撤销').children[1].click({clientX:100,clientY:100}); await settle();
+  const undoMenu=[...undoable.$('file-menu').querySelectorAll('button')].find(b=>b.textContent==='移除参考');
+  await undoMenu.click(); await settle();
+  assert.equal(undoable.$('status-action').textContent,'撤销');
+  await undoable.$('status-action').click(); await settle();
+  assert.match(undoable.$('picker-status').textContent,/已恢复/,'a completed undo says so');
+  assert.ok(undoable.server.references.some(f=>f.path==='/fixture/撤销.mp4'),'the reference came back');
+
+  // ---- A project switch with unsaved edits must not offer an undo the
+  // panel can no longer apply.
+  const switched=boot({list:[{path:'/fixture/切换.mp4',name:'切换.mp4',size:100,exists:true,isFile:true}],scope:'project'});
+  await settle();
+  switched.holdSave=[];
+  await switched.row('切换').children[1].click({clientX:100,clientY:100}); await settle();
+  const switchMenu=[...switched.$('file-menu').querySelectorAll('button')].find(b=>b.textContent==='移除参考');
+  await switchMenu.click(); await settle();
+  assert.ok(switched.holdSave.length,'the save is still in flight');
+  switched.server.scopeId='project-other';
+  switched.server.project={name:'另一项目',root:'/fixture/project-other'};
+  await switched.pollShelf(); await settle();
+  assert.match(switched.$('picker-status').textContent,/项目已切换/,'the switch is reported');
+  // The panel is no longer ready to apply edits; it must not offer an undo
+  // that would silently do nothing.
+  assert.equal(switched.$('status-action').hidden,true,'no undo is offered while the panel is not ready');
+
+  console.log('PASS synthetic UI: list scope, categories/search/bulk/conflict/reopen, compact tree/collapse/keyboard, rubber-band/add/cancel/scroll, thumbnails/grid, theme tokens, restore/conflict merge, drag/add, picker, PDF paging, menu keyboard, focus survival, video/text, stale responses, large assembly/cancel, remove/undo, multi-select, host requests, missing/relink, stale preview/cleared dimming/announced selection/honest undo');
 })().catch(e=>{console.error(e);process.exitCode=1;});

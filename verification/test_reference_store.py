@@ -789,6 +789,17 @@ class ThumbnailTests(unittest.TestCase):
             self.service.get(notes)
         self.assertEqual(len(list(self.cache.glob("*.json"))), 2)
 
+    def test_the_thumbnail_budget_covers_the_renderer_worst_case(self):
+        # The renderer waits up to 8 s per file and does them one after
+        # another, so a batch must be allowed that much time.
+        for count in (1, 6, 12):
+            budget = preview.thumb_timeout(count)
+            self.assertGreaterEqual(budget, preview.THUMB_FILE_SECONDS * count)
+            self.assertGreaterEqual(budget, preview.THUMB_STARTUP_SECONDS)
+        # The old budget capped at 60 s, which a 12-file batch can exceed.
+        self.assertGreaterEqual(preview.thumb_timeout(12), 12 * 8)
+        self.assertGreater(preview.thumb_timeout(12), 60)
+
     def test_tool_only_serves_files_in_this_chats_list(self):
         with patch.object(probe, "LIST_DIR", self.folder / "lists"), patch.object(probe, "THUMBNAILS", self.service):
             call = lambda arguments, thread="A": probe.dispatch("tools/call", {"name": "read_reference_thumbnails", "arguments": arguments, "_meta": {"threadId": thread}})
@@ -900,6 +911,26 @@ class RecoveryTests(unittest.TestCase):
     def test_a_write_with_a_bad_category_is_still_refused(self):
         with self.assertRaises(probe.ToolError):
             probe.STORE.save("A", [{"path": "/a.txt", "category": "z" * 100}], 0)
+
+    def test_a_long_legacy_list_is_not_cut_short_in_the_log(self):
+        references = [{"path": f"/Users/someone/proj{i}/clip.mp4", "name": "clip.mp4"} for i in range(300)]
+        probe.dispatch("tools/call", {"name": "save_probe_snapshot", "arguments": {
+            "snapshot": {"schema": 2, "references": references}}, "_meta": {"threadId": "A"}})
+        recovered = probe.legacy_lists(self.log)["A"]
+        self.assertEqual(len(recovered), 300)
+        self.assertEqual(recovered[-1]["path"], references[-1]["path"])
+
+    def test_other_snapshot_lists_stay_bounded(self):
+        # Only the reference list may be long; the rest of a snapshot is noise.
+        snapshot = {"schema": 2, "events": [{"n": i} for i in range(300)],
+                    "references": [{"path": "/a.txt"}]}
+        cleaned = probe.scrub_snapshot(snapshot)
+        self.assertEqual(len(cleaned["events"]), 150)
+        self.assertEqual(len(cleaned["references"]), 1)
+
+    def test_the_slow_tools_include_the_list_save(self):
+        # A list save takes the cross-process lock; it must not run inline.
+        self.assertIn("save_reference_list", probe.SLOW_TOOLS)
 
     def test_a_legacy_snapshot_reports_a_conflict_instead_of_claiming_success(self):
         probe.STORE.save("A", [{"path": "/other.txt"}], 0)
